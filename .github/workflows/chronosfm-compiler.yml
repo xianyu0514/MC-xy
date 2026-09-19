@@ -54,6 +54,9 @@ jobs:
       - name: Sparse million-region frontier benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runSparseFrontierBenchmark --args='1000000 200000'
+      - name: Exact execution template benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runExecutionTemplateBenchmark --args='100 100 100000'
 
   sfm-1-21-1-adapter:
     runs-on: ubuntu-latest

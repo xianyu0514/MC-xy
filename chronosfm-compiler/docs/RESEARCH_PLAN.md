@@ -43,8 +43,10 @@ Maintain endpoint/label/resource -> region dependency indexes. The current proto
 
 The research branch now includes a 0.01%, 0.1%, 1%, 5%, 10%, 50%, 100% persistent-frontier churn sweep. This measures bookkeeping/frontier cost only; it must not be misrepresented as the final execution crossover. The full-recompute crossover will be selected only after P7 supplies real region recomputation work.
 
-### P7 — exact-order compiled executor
+### P7 — exact-order compiled executor — CORE EXECUTION TEMPLATE IMPLEMENTED
 Use precomputed candidate order but retain SFM ResourceType/trackers/capability commit semantics. This is the first architecture-scale TPS milestone.
+
+The core now pre-groups exact operations into immutable Trigger -> ExactOperation[] templates. Tick-time execution performs no filtering/sorting/list construction, preserves original trigger/statement order, and preserves RedstoneTrigger's N-pulse block repetition. Any legacy trigger or unsupported statement causes fallback before executing any compiled operation. The remaining P7 work is the SFM-side bridge that maps region ids back to original SFM Statement instances while retaining ProgramContext/ResourceType commit behavior.
 
 ### P8 — endpoint classification
 OPAQUE: query normal capability every due tick.
