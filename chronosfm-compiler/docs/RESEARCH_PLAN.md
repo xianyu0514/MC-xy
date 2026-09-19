@@ -94,3 +94,8 @@ The migrated addon previously contained optional TPS backoff/tick-budget hooks. 
 ## SFM production hot-path micro-optimizations
 
 The integration layer includes a conservative diagnostic timing fast path for SFM Block.tick. When the manager logger is OFF, statements execute in the exact original list order without per-statement System.nanoTime()/INFO timing preparation. Any enabled logging level uses upstream SFM unchanged. This optimization never changes trigger cadence, transfer ordering, trackers, capability calls, or resources per logical tick.
+
+
+### Throughput-floor enforcement in the SFM bridge
+
+The Manager tick redirect no longer invokes Factory Studio's optional TpsBackoff.tryAcquire/record/onProgramRan hooks. Even though those features default off, a configured tick budget can skip due executions and would invalidate ChronoSFM throughput claims. ChronoSFM now always executes every due legacy Program.tick and may gain TPS only by removing redundant work.
