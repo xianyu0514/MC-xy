@@ -11,15 +11,15 @@ import java.util.Optional;
  * Persistent endpoint -> work-region bindings.
  *
  * Structural metadata (labels/resource types) is resolved against the compiler
- * dependency index only when the endpoint structure changes. Hot inventory or
- * capacity revisions reuse the cached dependent region array, so the steady
- * state update path does not repeat label/resource matching.
+ * dependency index only when endpoint structure changes. Hot inventory/capacity
+ * revisions mutate only a primitive revision field and mark the already-cached
+ * region ids: no descriptor/binding allocation and no label/resource matching.
  */
 public final class PersistentTransferGraph {
     private final DependencyIndex dependencies;
     private final PersistentEndpointIndex endpoints = new PersistentEndpointIndex();
     private final InvalidationEngine invalidation;
-    private final Map<Long, EndpointBinding> bindings = new HashMap<>();
+    private final Map<Long, BindingState> bindings = new HashMap<>();
 
     private long structuralRebindCount;
     private long hotStateUpdateCount;
@@ -31,14 +31,14 @@ public final class PersistentTransferGraph {
 
     public PersistentEndpointIndex.EndpointDelta upsert(EndpointDescriptor endpoint) {
         Objects.requireNonNull(endpoint, "endpoint");
-        EndpointBinding previousBinding = bindings.get(endpoint.endpointId());
+        BindingState previousBinding = bindings.get(endpoint.endpointId());
         var delta = endpoints.upsert(endpoint);
         if (!delta.changed()) return delta;
 
         if (delta.structureChanged()) {
             int[] previousRegions = previousBinding == null
                     ? new int[0]
-                    : previousBinding.dependentRegions();
+                    : previousBinding.dependentRegions;
             int[] nextRegions = dependencies.regionsForEndpoint(
                     endpoint.labels(),
                     endpoint.resourceTypes()
@@ -46,58 +46,72 @@ public final class PersistentTransferGraph {
 
             invalidation.invalidateRegions(previousRegions);
             invalidation.invalidateRegions(nextRegions);
-            bindings.put(endpoint.endpointId(), new EndpointBinding(endpoint, nextRegions));
+            bindings.put(
+                    endpoint.endpointId(),
+                    new BindingState(endpoint, nextRegions)
+            );
             structuralRebindCount++;
         } else {
-            int[] stableRegions = previousBinding == null
-                    ? dependencies.regionsForEndpoint(endpoint.labels(), endpoint.resourceTypes())
-                    : previousBinding.dependentRegions();
-            invalidation.invalidateRegions(stableRegions);
-            bindings.put(endpoint.endpointId(), new EndpointBinding(endpoint, stableRegions));
+            BindingState stable = Objects.requireNonNull(previousBinding, "stable binding");
+            stable.revision = endpoint.revision();
+            invalidation.invalidateRegions(stable.dependentRegions);
             hotStateUpdateCount++;
         }
         return delta;
     }
 
     public PersistentEndpointIndex.EndpointDelta remove(long endpointId) {
-        EndpointBinding previous = bindings.remove(endpointId);
+        BindingState previous = bindings.remove(endpointId);
         var delta = endpoints.remove(endpointId);
         if (previous != null) {
-            invalidation.invalidateRegions(previous.dependentRegions());
+            invalidation.invalidateRegions(previous.dependentRegions);
             structuralRebindCount++;
         }
         return delta;
     }
 
     public boolean endpointStateChanged(long endpointId) {
-        EndpointBinding current = bindings.get(endpointId);
+        BindingState current = bindings.get(endpointId);
         if (current == null) return false;
-        return endpointStateChanged(endpointId, current.descriptor().revision() + 1);
+        return endpointStateChanged(endpointId, current.revision + 1);
     }
 
+    /**
+     * Allocation-free steady-state update path.
+     */
     public boolean endpointStateChanged(long endpointId, long nextRevision) {
-        EndpointBinding current = bindings.get(endpointId);
+        BindingState current = bindings.get(endpointId);
         if (current == null) return false;
-
-        long currentRevision = current.descriptor().revision();
-        if (nextRevision < currentRevision) {
+        if (nextRevision < current.revision) {
             throw new IllegalArgumentException(
                     "endpoint revision cannot move backwards: "
-                            + currentRevision + " -> " + nextRevision
+                            + current.revision + " -> " + nextRevision
             );
         }
-        if (nextRevision == currentRevision) return false;
+        if (nextRevision == current.revision) return false;
 
-        EndpointDescriptor next = current.descriptor().withRevision(nextRevision);
-        endpoints.upsert(next); // revision-only: no membership churn
-        bindings.put(endpointId, new EndpointBinding(next, current.dependentRegions()));
-        invalidation.invalidateRegions(current.dependentRegions());
+        current.revision = nextRevision;
+        endpoints.updateRevision(endpointId, nextRevision);
+        invalidation.invalidateRegions(current.dependentRegions);
         hotStateUpdateCount++;
         return true;
     }
 
+    /**
+     * Diagnostic snapshot. Not intended for the per-tick hot path.
+     */
     public Optional<EndpointBinding> binding(long endpointId) {
-        return Optional.ofNullable(bindings.get(endpointId));
+        BindingState state = bindings.get(endpointId);
+        if (state == null) return Optional.empty();
+        return Optional.of(new EndpointBinding(
+                new EndpointDescriptor(
+                        endpointId,
+                        state.labels,
+                        state.resourceTypes,
+                        state.revision
+                ),
+                state.dependentRegions
+        ));
     }
 
     public PersistentEndpointIndex endpoints() {
@@ -118,6 +132,20 @@ public final class PersistentTransferGraph {
 
     public long hotStateUpdateCount() {
         return hotStateUpdateCount;
+    }
+
+    private static final class BindingState {
+        private final java.util.Set<String> labels;
+        private final java.util.Set<String> resourceTypes;
+        private final int[] dependentRegions;
+        private long revision;
+
+        private BindingState(EndpointDescriptor descriptor, int[] dependentRegions) {
+            this.labels = java.util.Set.copyOf(descriptor.labels());
+            this.resourceTypes = java.util.Set.copyOf(descriptor.resourceTypes());
+            this.revision = descriptor.revision();
+            this.dependentRegions = dependentRegions.clone();
+        }
     }
 
     public record EndpointBinding(

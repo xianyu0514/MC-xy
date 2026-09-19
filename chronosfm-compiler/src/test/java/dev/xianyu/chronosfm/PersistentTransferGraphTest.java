@@ -71,6 +71,7 @@ class PersistentTransferGraphTest {
 
         assertThrows(IllegalArgumentException.class, () -> graph.endpointStateChanged(11, 4));
         assertEquals(5, graph.binding(11).orElseThrow().descriptor().revision());
+        assertEquals(5, graph.endpoints().revision(11));
         assertEquals(0, graph.dirtyCount());
     }
 }

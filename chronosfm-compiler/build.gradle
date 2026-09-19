@@ -73,3 +73,11 @@ tasks.register('runExecutionTemplateBenchmark', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.xianyu.chronosfm.bench.ExecutionTemplateBenchmark'
 }
+
+
+tasks.register('runBindingReuseBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Compares cached endpoint-region bindings against per-change dependency recomputation.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.BindingReuseBenchmark'
+}

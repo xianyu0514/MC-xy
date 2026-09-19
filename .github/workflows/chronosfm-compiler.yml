@@ -55,6 +55,9 @@ jobs:
       - name: Persistent churn sweep benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runChurnSweepBenchmark --args='100000 3'
+      - name: Persistent binding reuse benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runBindingReuseBenchmark --args='100000 10000 7'
       - name: Sparse million-region frontier benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runSparseFrontierBenchmark --args='1000000 200000'
