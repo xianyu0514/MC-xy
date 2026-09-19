@@ -11,7 +11,8 @@
     "LabelPositionHolderRevisionMixin",
     "BlockNetworkRevisionMixin",
     "CapabilityCacheRevisionMixin",
-    "IoCapabilityDiscoveryMixin"
+    "IoCapabilityDiscoveryMixin",
+    "BlockTickFastPathMixin"
   ],
   "injectors": {
     "defaultRequire": 0

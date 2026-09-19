@@ -89,3 +89,8 @@ Only add CUDA if CPU planning remains a measured bottleneck at 100k/1M edges. GP
 ## Throughput-preserving runtime policy
 
 The migrated addon previously contained optional TPS backoff/tick-budget hooks. They are deliberately excluded from the ChronoSFM hot path because they can delay due work and therefore invalidate throughput comparisons. ChronoSFM performance claims must come only from removing redundant computation, compiling stable structure, and reducing per-transfer overhead.
+
+
+## SFM production hot-path micro-optimizations
+
+The integration layer includes a conservative diagnostic timing fast path for SFM Block.tick. When the manager logger is OFF, statements execute in the exact original list order without per-statement System.nanoTime()/INFO timing preparation. Any enabled logging level uses upstream SFM unchanged. This optimization never changes trigger cadence, transfer ordering, trackers, capability calls, or resources per logical tick.
