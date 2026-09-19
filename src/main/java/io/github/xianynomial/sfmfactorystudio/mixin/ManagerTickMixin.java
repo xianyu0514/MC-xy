@@ -3,17 +3,16 @@ package io.github.xianynomial.sfmfactorystudio.mixin;
 import ca.teamdman.sfm.common.blockentity.ManagerBlockEntity;
 import ca.teamdman.sfml.ast.Program;
 import io.github.xianynomial.sfmfactorystudio.chronosfm.ChronoSfmRuntime;
-import io.github.xianynomial.sfmfactorystudio.net.TpsBackoff;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * SFM manager hot-path wrapper.
+ * SFM manager hot-path wrapper for the throughput-preserving ChronoSFM runtime.
  *
- * ChronoSFM first removes provably inactive ProgramContext construction without
- * changing trigger frequency. Existing optional backoff/budget behaviour remains
- * available but is not part of the ChronoSFM correctness path.
+ * Hard invariant: this path may skip a Program.tick only when all triggers are
+ * mathematically proven inactive in the original SFM semantics. It never delays
+ * a due trigger, applies a tick budget, or changes timer frequency.
  */
 @Mixin(value = ManagerBlockEntity.class)
 public abstract class ManagerTickMixin {
@@ -33,15 +32,8 @@ public abstract class ManagerTickMixin {
             return false;
         }
 
-        // Legacy optional protection mode. Defaults to disabled.
-        if (!TpsBackoff.tryAcquire(manager)) {
-            return false;
-        }
-
-        long start = System.nanoTime();
-        boolean didSomething = program.tick(manager);
-        TpsBackoff.record(System.nanoTime() - start);
-        TpsBackoff.onProgramRan(manager, didSomething);
-        return didSomething;
+        // No TPS budget/backoff is allowed here. If SFM was due to execute this
+        // tick, the original SFM Program.tick runs exactly once.
+        return program.tick(manager);
     }
 }

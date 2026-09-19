@@ -7,6 +7,7 @@ A tick-synchronous logistics DSL can be compiled into a persistent incremental e
 ## Hard invariants
 
 - NEVER reduce the frequency of a trigger that is due in legacy SFM.
+- The ChronoSFM production path contains no tick-budget skip and no idle interval backoff; throughput-preserving benchmarks must run with the original SFM trigger cadence.
 - In exact mode, resources transferred after N logical ticks must equal legacy SFM for the same trace.
 - Unknown semantics always fall back to legacy execution.
 - Planning may move off-thread later; Minecraft capability commits may not.
@@ -83,3 +84,8 @@ Only add CUDA if CPU planning remains a measured bottleneck at 100k/1M edges. GP
 - Time Warp / PDES.
 - Multi-GPU.
 - Reducing trigger frequency to make TPS look better.
+
+
+## Throughput-preserving runtime policy
+
+The migrated addon previously contained optional TPS backoff/tick-budget hooks. They are deliberately excluded from the ChronoSFM hot path because they can delay due work and therefore invalidate throughput comparisons. ChronoSFM performance claims must come only from removing redundant computation, compiling stable structure, and reducing per-transfer overhead.
