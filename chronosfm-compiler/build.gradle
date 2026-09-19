@@ -57,3 +57,11 @@ tasks.register('runTriggerGateBenchmark', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.xianyu.chronosfm.bench.TriggerGateBenchmark'
 }
+
+
+tasks.register('runSparseFrontierBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Verifies low-churn frontier cost stays sparse even for million-scale region ids.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.SparseFrontierBenchmark'
+}
