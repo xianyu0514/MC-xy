@@ -84,7 +84,7 @@ jobs:
           curl -fL --retry 4 --retry-delay 2             -o libs/sfm-4.34.0.jar             "https://github.com/TeamDman/SuperFactoryManager/releases/download/4.34.0-26.1.2/Super.Factory.Manager.SFM.-MC1.21.1-4.34.0.jar"
           echo "4b589e0b310133998f26f0c12c3ee8d367360be1771e0e96c951322cea6c7ad0  libs/sfm-4.34.0.jar" | sha256sum -c -
       - name: Compile and test real SFM adapter
-        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" :test --tests 'io.github.xianynomial.sfmfactorystudio.chronosfm.SfmProgramAdapterTest'
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" :test --tests 'io.github.xianynomial.sfmfactorystudio.chronosfm.*'
       - name: Verify compiler core is embedded in addon jar
         run: |
           ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" jar
