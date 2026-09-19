@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/chronosfm-compiler-bootstrap
+      - 'research/**'
     paths:
       - 'chronosfm-compiler/**'
       - 'src/main/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'

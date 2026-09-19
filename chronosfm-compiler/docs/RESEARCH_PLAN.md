@@ -28,14 +28,18 @@ Land the #602-style lightweight trigger probe. Timers can be proven inactive wit
 ### P3 — compiled IR
 Translate safe AST subsets into immutable TriggerPlan and TransferRegion IR. Preserve exact source ordering.
 
-### P4 — persistent endpoint index
+### P4 — persistent endpoint index — CORE PROTOTYPE IMPLEMENTED
 Cache semantic label/resource/slot relationships while reusing SFM's existing CableNetwork capability cache.
+
+Current research branch provides the Minecraft-independent persistent membership/revision index. The next SFM-side step is binding stable endpoint ids to real label/position/side/slot descriptors without duplicating CableNetwork's capability cache.
 
 ### P5 — persistent transfer graph
 Separate static legal transfer relationships from dynamic inventory state. Rebuild only on structural invalidation.
 
-### P6 — incremental invalidation
-Maintain endpoint/label/resource -> region dependency indexes. Benchmark churn at 0.01%, 0.1%, 1%, 5%, 10%, 50%, 100% and select incremental/full recompute at the measured crossover.
+### P6 — incremental invalidation — PRECISE FRONTIER PROTOTYPE IMPLEMENTED
+Maintain endpoint/label/resource -> region dependency indexes. The current prototype uses composite label/resource dependencies, so one changed iron endpoint does not dirty unrelated fluid regions or every iron region globally.
+
+The remaining research gate is the full churn sweep at 0.01%, 0.1%, 1%, 5%, 10%, 50%, 100% and selecting incremental/full recompute at the measured crossover.
 
 ### P7 — exact-order compiled executor
 Use precomputed candidate order but retain SFM ResourceType/trackers/capability commit semantics. This is the first architecture-scale TPS milestone.
