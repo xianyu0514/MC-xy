@@ -200,6 +200,10 @@ public final class PersistentTransferGraph {
         return invalidation.drainDirtyRegions();
     }
 
+    public int drainDirtyRegionsInto(int[] destination) {
+        return invalidation.drainDirtyRegionsInto(destination);
+    }
+
     public long structuralRebindCount() {
         return structuralRebindCount;
     }
