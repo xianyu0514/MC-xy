@@ -40,9 +40,10 @@ public final class ChurnSweepBenchmark {
                 new TriggerModel.Timer(1, TriggerModel.Alignment.LOCAL, 0, statements)
         )));
         var graph = new PersistentTransferGraph(plan.dependencyIndex());
+        var handles = new PersistentTransferGraph.EndpointHandle[regions];
 
         for (int i = 0; i < regions; i++) {
-            graph.upsert(new EndpointDescriptor(
+            handles[i] = graph.bind(new EndpointDescriptor(
                     i,
                     Set.of("dest-" + i),
                     Set.of("item:" + (i % 128)),
@@ -54,21 +55,21 @@ public final class ChurnSweepBenchmark {
         System.out.printf("Churn sweep over %,d persistent regions (%d repetitions)%n", regions, repetitions);
         System.out.println("change%,changes,median_ms,ns_per_change,dirty_regions");
 
-        long revision = 1;
         for (double fraction : FRACTIONS) {
             int changes = Math.max(1, (int) Math.round(regions * fraction));
             long[] samples = new long[repetitions];
             int dirty = -1;
 
             for (int rep = 0; rep < repetitions; rep++) {
+                int offset = (rep * 104_729) % regions;
                 long start = System.nanoTime();
                 for (int i = 0; i < changes; i++) {
-                    graph.endpointStateChanged(i, revision);
+                    int id = (int) (((long) i * 7_919L + offset) % regions);
+                    graph.endpointStateChanged(handles[id]);
                 }
                 samples[rep] = System.nanoTime() - start;
                 dirty = graph.dirtyCount();
                 graph.drainDirtyRegions();
-                revision++;
             }
 
             if (dirty != changes) {
