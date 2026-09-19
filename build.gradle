@@ -1,0 +1,104 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.gradle.userdev' version '7.0.190'
+}
+
+version = project.mod_version
+group = project.mod_group_id
+
+base {
+    archivesName = "SFM-Factory-Studio-${project.minecraft_version}"
+}
+
+tasks.named('jar', Jar).configure {
+    archiveClassifier.set('slim')
+
+    // ChronoSFM is an internal compiler/runtime module, not a separate required mod.
+    // Embed its classes into the addon jar so release users do not need another jar.
+    from(project(':chronosfm-compiler').sourceSets.main.output)
+    dependsOn(project(':chronosfm-compiler').tasks.named('classes'))
+}
+
+tasks.named('jarJar').configure {
+    archiveClassifier.set('')
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+repositories {
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    mavenCentral()
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://jitpack.io' }
+    maven { url = 'https://modmaven.dev/' }
+    maven { url = 'https://maven.blamejared.com' }
+}
+
+def sfmJar = files(project.sfm_jar)
+def mekApiCoords = "mekanism:Mekanism:1.21.1-10.7.4.60:api"
+def jeiVersion = "19.21.0.247"
+def jeiCommonApi = "mezz.jei:jei-1.21.1-common-api:${jeiVersion}"
+def jeiNeoApi = "mezz.jei:jei-1.21.1-neoforge-api:${jeiVersion}"
+def pininCoords = "com.github.Towdium:PinIn:1.6.0"
+
+dependencies {
+    implementation "net.neoforged:neoforge:${project.neo_version}"
+
+    // Pure-Java ChronoSFM compiler/runtime core.
+    implementation project(':chronosfm-compiler')
+
+    compileOnly sfmJar
+    compileOnly(mekApiCoords) { transitive = false }
+    compileOnly(jeiCommonApi) { transitive = false }
+    compileOnly(jeiNeoApi) { transitive = false }
+
+    testImplementation sfmJar
+    testImplementation project(':chronosfm-compiler')
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation(pininCoords) { transitive = false }
+    jarJar(pininCoords) { version { strictly "1.6.0" } }
+    testImplementation(pininCoords) { transitive = false }
+}
+
+runs {
+    configureEach {
+        systemProperty 'forge.logging.markers', 'REGISTRIES'
+        systemProperty 'forge.logging.console.level', 'debug'
+        modSource project.sourceSets.main
+        dependencies {
+            runtime sfmJar
+        }
+    }
+    client { }
+    server { }
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    def utf8Props = new Properties()
+    file('gradle.properties').newReader('UTF-8').withCloseable { reader -> utf8Props.load(reader) }
+    def replaceProperties = [
+            minecraft_version      : utf8Props['minecraft_version'],
+            minecraft_version_range: utf8Props['minecraft_version_range'],
+            neo_version            : utf8Props['neo_version'],
+            neo_version_range      : utf8Props['neo_version_range'],
+            loader_version_range   : utf8Props['loader_version_range'],
+            mod_id                 : utf8Props['mod_id'],
+            mod_name               : utf8Props['mod_name'],
+            mod_license            : utf8Props['mod_license'],
+            mod_version            : utf8Props['mod_version'],
+            mod_authors            : utf8Props['mod_authors'],
+            mod_description        : utf8Props['mod_description']
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
