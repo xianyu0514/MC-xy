@@ -2,45 +2,106 @@ package dev.xianyu.chronosfm.runtime;
 
 import dev.xianyu.chronosfm.ir.DependencyIndex;
 
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Objects;
 
+/**
+ * Sparse dirty frontier.
+ *
+ * BitSet is used only for O(1) deduplication. A compact int array records the
+ * actual dirty ids, so draining K changed regions is O(K) rather than scanning
+ * BitSet words up to the largest region id. This matters when a tiny change
+ * touches a high-numbered region in a million-region compiled graph.
+ */
 public final class InvalidationEngine {
     private final DependencyIndex dependencies;
-    private final BitSet dirtyRegions = new BitSet();
+    private final BitSet dirtyMembership = new BitSet();
+
+    private int[] dirtyIds = new int[32];
+    private int dirtySize;
 
     public InvalidationEngine(DependencyIndex dependencies) {
         this.dependencies = Objects.requireNonNull(dependencies, "dependencies");
     }
 
     public void invalidateLabel(String label) {
-        mark(dependencies.regionsForLabel(label));
+        invalidateRegions(dependencies.regionsForLabel(label));
     }
 
     public void invalidateResource(String resourceKey) {
-        mark(dependencies.regionsForResource(resourceKey));
+        invalidateRegions(dependencies.regionsForResource(resourceKey));
+    }
+
+    public void invalidateEndpoint(EndpointDescriptor endpoint) {
+        Objects.requireNonNull(endpoint, "endpoint");
+        invalidateRegions(dependencies.regionsForEndpoint(endpoint.labels(), endpoint.resourceTypes()));
+    }
+
+    public void invalidateRegions(int[] regionIds) {
+        for (int id : regionIds) invalidateRegion(id);
     }
 
     public void invalidateRegion(int regionId) {
         if (regionId < 0) throw new IllegalArgumentException("regionId must be >= 0");
-        dirtyRegions.set(regionId);
+        if (dirtyMembership.get(regionId)) return;
+
+        dirtyMembership.set(regionId);
+        ensureCapacity(dirtySize + 1);
+        dirtyIds[dirtySize++] = regionId;
     }
 
     public boolean isDirty(int regionId) {
-        return dirtyRegions.get(regionId);
+        return dirtyMembership.get(regionId);
     }
 
     public int dirtyCount() {
-        return dirtyRegions.cardinality();
+        return dirtySize;
     }
 
+    /**
+     * Deterministic drain. Sorting is proportional to K dirty ids, not to graph
+     * size. Later planner stages may add an unordered drain when ordering is
+     * provably irrelevant.
+     */
     public int[] drainDirtyRegions() {
-        int[] result = dirtyRegions.stream().toArray();
-        dirtyRegions.clear();
+        if (dirtySize == 0) return new int[0];
+
+        int[] result = new int[dirtySize];
+        drainDirtyRegionsInto(result);
         return result;
     }
 
-    private void mark(int[] ids) {
-        for (int id : ids) dirtyRegions.set(id);
+    /**
+     * Allocation-free drain for the planner hot path.
+     *
+     * The caller owns and reuses the destination buffer. The first returned
+     * {@code count} entries are sorted work-region ids; entries after count are
+     * untouched.
+     */
+    public int drainDirtyRegionsInto(int[] destination) {
+        Objects.requireNonNull(destination, "destination");
+        int count = dirtySize;
+        if (count == 0) return 0;
+        if (destination.length < count) {
+            throw new IllegalArgumentException(
+                    "destination too small: need " + count + ", got " + destination.length
+            );
+        }
+
+        Arrays.sort(dirtyIds, 0, count);
+        System.arraycopy(dirtyIds, 0, destination, 0, count);
+
+        for (int i = 0; i < count; i++) {
+            dirtyMembership.clear(dirtyIds[i]);
+        }
+        dirtySize = 0;
+        return count;
+    }
+
+    private void ensureCapacity(int required) {
+        if (required <= dirtyIds.length) return;
+        int next = Math.max(required, dirtyIds.length << 1);
+        dirtyIds = Arrays.copyOf(dirtyIds, next);
     }
 }

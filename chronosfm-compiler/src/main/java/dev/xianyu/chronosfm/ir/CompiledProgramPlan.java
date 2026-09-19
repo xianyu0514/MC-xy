@@ -1,6 +1,7 @@
 package dev.xianyu.chronosfm.ir;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -19,6 +20,7 @@ public record CompiledProgramPlan(
         triggers = List.copyOf(triggers);
         transferRegions = List.copyOf(transferRegions);
         exactOperations = List.copyOf(exactOperations);
+        validateUniqueRegionIds(transferRegions, exactOperations);
     }
 
     public int[] dueTriggerIndexes(long localTick, long globalTick, int redstonePulses) {
@@ -54,5 +56,41 @@ public record CompiledProgramPlan(
         }
         result.sort((a, b) -> Integer.compare(a.exactOrderOrdinal(), b.exactOrderOrdinal()));
         return List.copyOf(result);
+    }
+
+    public int workRegionCount() {
+        return transferRegions.size() + exactOperations.size();
+    }
+
+    public int maxRegionIdExclusive() {
+        int max = -1;
+        for (TransferRegion region : transferRegions) max = Math.max(max, region.regionId());
+        for (ExactOperation operation : exactOperations) max = Math.max(max, operation.regionId());
+        return max + 1;
+    }
+
+    private static void validateUniqueRegionIds(
+            List<TransferRegion> transferRegions,
+            List<ExactOperation> exactOperations
+    ) {
+        BitSet seen = new BitSet();
+        int count = 0;
+        for (TransferRegion region : transferRegions) {
+            if (seen.get(region.regionId())) {
+                throw new IllegalArgumentException("Duplicate work region id: " + region.regionId());
+            }
+            seen.set(region.regionId());
+            count++;
+        }
+        for (ExactOperation operation : exactOperations) {
+            if (seen.get(operation.regionId())) {
+                throw new IllegalArgumentException("Duplicate work region id: " + operation.regionId());
+            }
+            seen.set(operation.regionId());
+            count++;
+        }
+        if (seen.cardinality() != count) {
+            throw new IllegalArgumentException("Work region id cardinality mismatch");
+        }
     }
 }

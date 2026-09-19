@@ -8,16 +8,20 @@ Preserve SFM's observable per-tick logistics semantics and throughput while movi
 
 The compiler is intentionally Minecraft-independent. No `net.minecraft.*`, Forge, NeoForge, Fabric, ItemStack, BlockEntity, or SFM runtime class may enter this module.
 
-## v0.1 implemented
+## v0.2 research branch implemented
 
 - Lightweight timer-trigger compilation (local/global tick alignment).
 - Exact source-order `TransferRegion` IR.
 - Conservative legacy fallback for opaque triggers/statements.
 - Label/resource dependency index.
+- Collision-free unified work-region id space across synthetic transfers and exact IO operations.
+- Persistent endpoint index with deterministic label/resource membership.
+- Composite label/resource dependency index to avoid invalidating every region of a shared resource type.
+- Incremental endpoint-state frontier: endpoint changes dirty only compatible dependent work regions.
 - Incremental invalidation engine using compact region bitsets.
 - Exact-order transfer plan view.
 - Differential-friendly immutable model objects.
-- Unit tests and a compiler scaling smoke benchmark.
+- Unit tests, a 100k compiler scaling smoke benchmark, and a 100k-region / 1k-change incremental-frontier benchmark.
 
 ## Correctness invariants
 

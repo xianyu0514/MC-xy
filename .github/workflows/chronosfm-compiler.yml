@@ -1,14 +1,20 @@
 name: ChronoSFM Compiler
 
+concurrency:
+  group: chronosfm-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
       - main
       - feat/chronosfm-compiler-bootstrap
+      - 'research/**'
     paths:
       - 'chronosfm-compiler/**'
       - 'src/main/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
-      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/ManagerTickMixin.java'
+      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/**'
+      - 'src/main/resources/sfmfactorystudio.mixins.json'
       - 'src/test/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
       - 'settings.gradle'
       - 'build.gradle'
@@ -17,7 +23,8 @@ on:
     paths:
       - 'chronosfm-compiler/**'
       - 'src/main/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
-      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/ManagerTickMixin.java'
+      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/**'
+      - 'src/main/resources/sfmfactorystudio.mixins.json'
       - 'src/test/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
       - 'settings.gradle'
       - 'build.gradle'
@@ -27,11 +34,12 @@ jobs:
   core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
       - name: Test compiler core
@@ -40,15 +48,34 @@ jobs:
       - name: Compiler scaling smoke benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runCompilerBenchmark --args='100000'
+      - name: Zero-allocation trigger gate benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runTriggerGateBenchmark --args='5000000'
+      - name: Incremental endpoint/frontier smoke benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runIncrementalBenchmark --args='100000 1000'
+      - name: Persistent churn sweep benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runChurnSweepBenchmark --args='100000 3'
+      - name: Persistent binding reuse benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runBindingReuseBenchmark --args='100000 10000 7'
+      - name: Sparse million-region frontier benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runSparseFrontierBenchmark --args='1000000 200000'
+      - name: Exact execution template benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runExecutionTemplateBenchmark --args='100 100 100000'
 
   sfm-1-21-1-adapter:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
       - name: Download official SFM 4.34.0 for MC 1.21.1
@@ -57,7 +84,7 @@ jobs:
           curl -fL --retry 4 --retry-delay 2             -o libs/sfm-4.34.0.jar             "https://github.com/TeamDman/SuperFactoryManager/releases/download/4.34.0-26.1.2/Super.Factory.Manager.SFM.-MC1.21.1-4.34.0.jar"
           echo "4b589e0b310133998f26f0c12c3ee8d367360be1771e0e96c951322cea6c7ad0  libs/sfm-4.34.0.jar" | sha256sum -c -
       - name: Compile and test real SFM adapter
-        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" test --tests 'io.github.xianynomial.sfmfactorystudio.chronosfm.SfmProgramAdapterTest'
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" :test --tests 'io.github.xianynomial.sfmfactorystudio.chronosfm.*'
       - name: Verify compiler core is embedded in addon jar
         run: |
           ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" jar

@@ -34,12 +34,11 @@ public final class ChronoSfmRuntime {
                     p -> new TriggerProbe(COMPILER.compile(ADAPTER.adapt(p)))
             );
 
-            var result = probe.probe(
+            return probe.requiresFullContext(
                     manager.getTick(),
                     manager.getLevel().getGameTime(),
                     manager.getUnprocessedRedstonePulseCount()
             );
-            return !result.maySkipFullContext();
         } catch (Throwable ignored) {
             // Optimization failure must never change SFM semantics.
             return true;

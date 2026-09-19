@@ -33,3 +33,51 @@ tasks.register('runCompilerBenchmark', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.xianyu.chronosfm.bench.CompilerBenchmark'
 }
+
+
+tasks.register('runIncrementalBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Runs the persistent endpoint/incremental invalidation scaling smoke benchmark.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.IncrementalInvalidationBenchmark'
+}
+
+
+tasks.register('runChurnSweepBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Sweeps persistent-frontier costs from 0.01% to 100% endpoint churn.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.ChurnSweepBenchmark'
+}
+
+
+tasks.register('runTriggerGateBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Runs the zero-allocation trigger preflight smoke benchmark.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.TriggerGateBenchmark'
+}
+
+
+tasks.register('runSparseFrontierBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Verifies low-churn frontier cost stays sparse even for million-scale region ids.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.SparseFrontierBenchmark'
+}
+
+
+tasks.register('runExecutionTemplateBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Runs the precompiled exact-order execution-template benchmark.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.ExecutionTemplateBenchmark'
+}
+
+
+tasks.register('runBindingReuseBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Compares cached endpoint-region bindings against per-change dependency recomputation.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.BindingReuseBenchmark'
+}

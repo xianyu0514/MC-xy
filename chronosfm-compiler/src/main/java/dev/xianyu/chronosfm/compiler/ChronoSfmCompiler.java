@@ -21,7 +21,7 @@ public final class ChronoSfmCompiler {
         List<TransferRegion> regions = new ArrayList<>();
         List<ExactOperation> operations = new ArrayList<>();
 
-        int regionId = 0;
+        int nextRegionId = 0;
         int order = 0;
         boolean requiresLegacy = false;
 
@@ -64,10 +64,11 @@ public final class ChronoSfmCompiler {
             for (int statementIndex = 0; statementIndex < statements.size(); statementIndex++) {
                 StatementModel statement = statements.get(statementIndex);
                 int statementOrder = order++;
+                int regionId = nextRegionId++;
 
                 if (statement instanceof StatementModel.Transfer transfer) {
                     regions.add(new TransferRegion(
-                            regionId++,
+                            regionId,
                             triggerIndex,
                             statementIndex,
                             statementOrder,
@@ -80,6 +81,7 @@ public final class ChronoSfmCompiler {
                     ));
                 } else if (statement instanceof StatementModel.Input input) {
                     operations.add(new ExactOperation.InputOp(
+                            regionId,
                             triggerIndex,
                             statementIndex,
                             statementOrder,
@@ -89,6 +91,7 @@ public final class ChronoSfmCompiler {
                     ));
                 } else if (statement instanceof StatementModel.Output output) {
                     operations.add(new ExactOperation.OutputOp(
+                            regionId,
                             triggerIndex,
                             statementIndex,
                             statementOrder,
@@ -99,6 +102,7 @@ public final class ChronoSfmCompiler {
                     ));
                 } else if (statement instanceof StatementModel.Opaque opaque) {
                     operations.add(new ExactOperation.LegacyBarrier(
+                            regionId,
                             triggerIndex,
                             statementIndex,
                             statementOrder,

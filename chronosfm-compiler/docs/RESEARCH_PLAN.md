@@ -7,6 +7,7 @@ A tick-synchronous logistics DSL can be compiled into a persistent incremental e
 ## Hard invariants
 
 - NEVER reduce the frequency of a trigger that is due in legacy SFM.
+- The ChronoSFM production path contains no tick-budget skip and no idle interval backoff; throughput-preserving benchmarks must run with the original SFM trigger cadence.
 - In exact mode, resources transferred after N logical ticks must equal legacy SFM for the same trace.
 - Unknown semantics always fall back to legacy execution.
 - Planning may move off-thread later; Minecraft capability commits may not.
@@ -28,17 +29,25 @@ Land the #602-style lightweight trigger probe. Timers can be proven inactive wit
 ### P3 — compiled IR
 Translate safe AST subsets into immutable TriggerPlan and TransferRegion IR. Preserve exact source ordering.
 
-### P4 — persistent endpoint index
+### P4 — persistent endpoint index — CORE PROTOTYPE IMPLEMENTED
 Cache semantic label/resource/slot relationships while reusing SFM's existing CableNetwork capability cache.
 
-### P5 — persistent transfer graph
+Current research branch provides the Minecraft-independent persistent membership/revision index. The SFM-side integration now also prototypes a conservative persistent capability-route template: for non-round-robin absolute-side LabelAccess, stable label -> BlockPos -> direction addresses are reused across due ticks while SFM's own CableNetwork is still queried for the current capability every tick. No third-party capability object or slot content is retained. Relative sides, round robin, missing revision instrumentation, and diagnostic logging fail closed to upstream discovery.
+
+### P5 — persistent transfer graph — ENDPOINT BINDING PROTOTYPE IMPLEMENTED
 Separate static legal transfer relationships from dynamic inventory state. Rebuild only on structural invalidation.
 
-### P6 — incremental invalidation
-Maintain endpoint/label/resource -> region dependency indexes. Benchmark churn at 0.01%, 0.1%, 1%, 5%, 10%, 50%, 100% and select incremental/full recompute at the measured crossover.
+The current prototype caches each endpoint's dependent work-region array. Label/resource matching is performed on structural bind/rebind only; ordinary inventory/capacity revisions reuse that cached array and directly mark the dirty frontier. This is specifically aimed at infinite-resource/high-frequency worlds where endpoint state changes every tick.
 
-### P7 — exact-order compiled executor
+### P6 — incremental invalidation — PRECISE FRONTIER PROTOTYPE IMPLEMENTED
+Maintain endpoint/label/resource -> region dependency indexes. The current prototype uses composite label/resource dependencies, so one changed iron endpoint does not dirty unrelated fluid regions or every iron region globally. Dirty-region storage is now sparse: BitSet is used only for deduplication while an explicit compact frontier array makes drain cost depend on K dirty regions instead of the highest region id. This closes an important hidden O(total-id-span) failure mode for million-region low-churn graphs.
+
+The research branch now includes a 0.01%, 0.1%, 1%, 5%, 10%, 50%, 100% persistent-frontier churn sweep. This measures bookkeeping/frontier cost only; it must not be misrepresented as the final execution crossover. The full-recompute crossover will be selected only after P7 supplies real region recomputation work.
+
+### P7 — exact-order compiled executor — CORE EXECUTION TEMPLATE IMPLEMENTED
 Use precomputed candidate order but retain SFM ResourceType/trackers/capability commit semantics. This is the first architecture-scale TPS milestone.
+
+The core now pre-groups exact operations into immutable Trigger -> ExactOperation[] templates. Tick-time execution performs no filtering/sorting/list construction, preserves original trigger/statement order, and preserves RedstoneTrigger's N-pulse block repetition. Any legacy trigger or unsupported statement causes fallback before executing any compiled operation. The remaining P7 work is the SFM-side bridge that maps region ids back to original SFM Statement instances while retaining ProgramContext/ResourceType commit behavior.
 
 ### P8 — endpoint classification
 OPAQUE: query normal capability every due tick.
@@ -75,3 +84,18 @@ Only add CUDA if CPU planning remains a measured bottleneck at 100k/1M edges. GP
 - Time Warp / PDES.
 - Multi-GPU.
 - Reducing trigger frequency to make TPS look better.
+
+
+## Throughput-preserving runtime policy
+
+The migrated addon previously contained optional TPS backoff/tick-budget hooks. They are deliberately excluded from the ChronoSFM hot path because they can delay due work and therefore invalidate throughput comparisons. ChronoSFM performance claims must come only from removing redundant computation, compiling stable structure, and reducing per-transfer overhead.
+
+
+## SFM production hot-path micro-optimizations
+
+The integration layer includes a conservative diagnostic timing fast path for SFM Block.tick. When the manager logger is OFF, statements execute in the exact original list order without per-statement System.nanoTime()/INFO timing preparation. Any enabled logging level uses upstream SFM unchanged. This optimization never changes trigger cadence, transfer ordering, trackers, capability calls, or resources per logical tick.
+
+
+### Throughput-floor enforcement in the SFM bridge
+
+The Manager tick redirect no longer invokes Factory Studio's optional TpsBackoff.tryAcquire/record/onProgramRan hooks. Even though those features default off, a configured tick budget can skip due executions and would invalidate ChronoSFM throughput claims. ChronoSFM now always executes every due legacy Program.tick and may gain TPS only by removing redundant work.

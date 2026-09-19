@@ -5,8 +5,15 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "WithTagMixin",
-    "IntervalMixin",
-    "ManagerTickMixin"
+    "ManagerTickMixin",
+    "ProgramContextMixin",
+    "CableNetworkManagerAccessor",
+    "LabelPositionHolderRevisionMixin",
+    "BlockNetworkRevisionMixin",
+    "CapabilityCacheRevisionMixin",
+    "IoCapabilityDiscoveryMixin",
+    "BlockTickFastPathMixin",
+    "ProgramTickFastPathMixin"
   ],
   "injectors": {
     "defaultRequire": 0
