@@ -46,8 +46,8 @@ class SfmCapabilityRouteCacheTest {
         LabelAccess cached = access(RoundRobin.Behaviour.UNMODIFIED);
 
         assertEquals(
-                simplify(upstream.getLabelledPositions(holder)),
-                simplify(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder))
+                simplifyPairs(upstream.getLabelledPositions(holder)),
+                simplifyCandidates(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder))
         );
     }
 
@@ -59,8 +59,8 @@ class SfmCapabilityRouteCacheTest {
 
         for (int i = 0; i < 12; i++) {
             assertEquals(
-                    simplify(upstream.getLabelledPositions(holder)),
-                    simplify(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder)),
+                    simplifyPairs(upstream.getLabelledPositions(holder)),
+                    simplifyCandidates(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder)),
                     "mismatch on round " + i
             );
         }
@@ -74,8 +74,8 @@ class SfmCapabilityRouteCacheTest {
 
         for (int i = 0; i < 12; i++) {
             assertEquals(
-                    simplify(upstream.getLabelledPositions(holder)),
-                    simplify(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder)),
+                    simplifyPairs(upstream.getLabelledPositions(holder)),
+                    simplifyCandidates(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder)),
                     "mismatch on round " + i
             );
         }
@@ -100,7 +100,7 @@ class SfmCapabilityRouteCacheTest {
         );
     }
 
-    private static List<String> simplify(List<Pair<Label, BlockPos>> pairs) {
+    private static List<String> simplifyPairs(List<Pair<Label, BlockPos>> pairs) {
         ArrayList<String> result = new ArrayList<>();
         for (Pair<Label, BlockPos> pair : pairs) {
             result.add(pair.getFirst().name() + "@" + pair.getSecond().asLong());
@@ -108,7 +108,7 @@ class SfmCapabilityRouteCacheTest {
         return result;
     }
 
-    private static List<String> simplify(
+    private static List<String> simplifyCandidates(
             List<SfmCapabilityRouteCache.RouteCandidate> candidates
     ) {
         ArrayList<String> result = new ArrayList<>();
