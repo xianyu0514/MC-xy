@@ -49,3 +49,11 @@ tasks.register('runChurnSweepBenchmark', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.xianyu.chronosfm.bench.ChurnSweepBenchmark'
 }
+
+
+tasks.register('runTriggerGateBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Runs the zero-allocation trigger preflight smoke benchmark.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.TriggerGateBenchmark'
+}

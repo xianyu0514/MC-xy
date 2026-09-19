@@ -42,6 +42,9 @@ jobs:
       - name: Compiler scaling smoke benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runCompilerBenchmark --args='100000'
+      - name: Zero-allocation trigger gate benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runTriggerGateBenchmark --args='5000000'
       - name: Incremental endpoint/frontier smoke benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runIncrementalBenchmark --args='100000 1000'
