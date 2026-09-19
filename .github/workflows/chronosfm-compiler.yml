@@ -13,7 +13,8 @@ on:
     paths:
       - 'chronosfm-compiler/**'
       - 'src/main/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
-      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/ManagerTickMixin.java'
+      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/**'
+      - 'src/main/resources/sfmfactorystudio.mixins.json'
       - 'src/test/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
       - 'settings.gradle'
       - 'build.gradle'
@@ -22,7 +23,8 @@ on:
     paths:
       - 'chronosfm-compiler/**'
       - 'src/main/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
-      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/ManagerTickMixin.java'
+      - 'src/main/java/io/github/xianynomial/sfmfactorystudio/mixin/**'
+      - 'src/main/resources/sfmfactorystudio.mixins.json'
       - 'src/test/java/io/github/xianynomial/sfmfactorystudio/chronosfm/**'
       - 'settings.gradle'
       - 'build.gradle'
