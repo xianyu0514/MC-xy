@@ -14,11 +14,23 @@ public final class InvalidationEngine {
     }
 
     public void invalidateLabel(String label) {
-        mark(dependencies.regionsForLabel(label));
+        invalidateRegions(dependencies.regionsForLabel(label));
     }
 
     public void invalidateResource(String resourceKey) {
-        mark(dependencies.regionsForResource(resourceKey));
+        invalidateRegions(dependencies.regionsForResource(resourceKey));
+    }
+
+    public void invalidateEndpoint(EndpointDescriptor endpoint) {
+        Objects.requireNonNull(endpoint, "endpoint");
+        invalidateRegions(dependencies.regionsForEndpoint(endpoint.labels(), endpoint.resourceTypes()));
+    }
+
+    public void invalidateRegions(int[] regionIds) {
+        for (int id : regionIds) {
+            if (id < 0) throw new IllegalArgumentException("regionId must be >= 0");
+            dirtyRegions.set(id);
+        }
     }
 
     public void invalidateRegion(int regionId) {
@@ -38,9 +50,5 @@ public final class InvalidationEngine {
         int[] result = dirtyRegions.stream().toArray();
         dirtyRegions.clear();
         return result;
-    }
-
-    private void mark(int[] ids) {
-        for (int id : ids) dirtyRegions.set(id);
     }
 }

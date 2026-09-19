@@ -8,14 +8,16 @@ import java.util.Objects;
 /**
  * Exact source-order IO/control IR.
  *
- * This layer deliberately does not fuse, reorder or solve flow. It is the
- * correctness boundary used before structural optimizations are enabled.
+ * Every operation owns a globally unique work-region id within its compiled
+ * program. The id space is shared with TransferRegion so incremental
+ * invalidation can never alias an exact operation with a synthetic transfer.
  */
 public sealed interface ExactOperation permits
         ExactOperation.InputOp,
         ExactOperation.OutputOp,
         ExactOperation.LegacyBarrier {
 
+    int regionId();
     int triggerIndex();
     int statementIndex();
     int exactOrderOrdinal();
@@ -29,6 +31,7 @@ public sealed interface ExactOperation permits
     }
 
     record InputOp(
+            int regionId,
             int triggerIndex,
             int statementIndex,
             int exactOrderOrdinal,
@@ -37,7 +40,7 @@ public sealed interface ExactOperation permits
             boolean each
     ) implements ExactOperation {
         public InputOp {
-            validateIds(triggerIndex, statementIndex, exactOrderOrdinal);
+            validateIds(regionId, triggerIndex, statementIndex, exactOrderOrdinal);
             Objects.requireNonNull(selector, "selector");
             Objects.requireNonNull(resources, "resources");
         }
@@ -54,6 +57,7 @@ public sealed interface ExactOperation permits
     }
 
     record OutputOp(
+            int regionId,
             int triggerIndex,
             int statementIndex,
             int exactOrderOrdinal,
@@ -63,7 +67,7 @@ public sealed interface ExactOperation permits
             boolean emptySlotsOnly
     ) implements ExactOperation {
         public OutputOp {
-            validateIds(triggerIndex, statementIndex, exactOrderOrdinal);
+            validateIds(regionId, triggerIndex, statementIndex, exactOrderOrdinal);
             Objects.requireNonNull(selector, "selector");
             Objects.requireNonNull(resources, "resources");
         }
@@ -84,20 +88,21 @@ public sealed interface ExactOperation permits
      * exists for the underlying SFM statement/control-flow construct.
      */
     record LegacyBarrier(
+            int regionId,
             int triggerIndex,
             int statementIndex,
             int exactOrderOrdinal,
             String reason
     ) implements ExactOperation {
         public LegacyBarrier {
-            validateIds(triggerIndex, statementIndex, exactOrderOrdinal);
+            validateIds(regionId, triggerIndex, statementIndex, exactOrderOrdinal);
             Objects.requireNonNull(reason, "reason");
         }
     }
 
-    private static void validateIds(int triggerIndex, int statementIndex, int order) {
-        if (triggerIndex < 0 || statementIndex < 0 || order < 0) {
-            throw new IllegalArgumentException("trigger/statement/order must be >= 0");
+    private static void validateIds(int regionId, int triggerIndex, int statementIndex, int order) {
+        if (regionId < 0 || triggerIndex < 0 || statementIndex < 0 || order < 0) {
+            throw new IllegalArgumentException("region/trigger/statement/order must be >= 0");
         }
     }
 }

@@ -40,6 +40,9 @@ jobs:
       - name: Compiler scaling smoke benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runCompilerBenchmark --args='100000'
+      - name: Incremental endpoint/frontier smoke benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runIncrementalBenchmark --args='100000 1000'
 
   sfm-1-21-1-adapter:
     runs-on: ubuntu-latest

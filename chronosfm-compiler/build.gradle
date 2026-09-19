@@ -33,3 +33,11 @@ tasks.register('runCompilerBenchmark', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.xianyu.chronosfm.bench.CompilerBenchmark'
 }
+
+
+tasks.register('runIncrementalBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Runs the persistent endpoint/incremental invalidation scaling smoke benchmark.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.IncrementalInvalidationBenchmark'
+}
