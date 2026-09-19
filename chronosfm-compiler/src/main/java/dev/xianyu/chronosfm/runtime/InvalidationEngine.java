@@ -67,14 +67,36 @@ public final class InvalidationEngine {
     public int[] drainDirtyRegions() {
         if (dirtySize == 0) return new int[0];
 
-        int[] result = Arrays.copyOf(dirtyIds, dirtySize);
-        Arrays.sort(result);
+        int[] result = new int[dirtySize];
+        drainDirtyRegionsInto(result);
+        return result;
+    }
 
-        for (int i = 0; i < dirtySize; i++) {
+    /**
+     * Allocation-free drain for the planner hot path.
+     *
+     * The caller owns and reuses the destination buffer. The first returned
+     * {@code count} entries are sorted work-region ids; entries after count are
+     * untouched.
+     */
+    public int drainDirtyRegionsInto(int[] destination) {
+        Objects.requireNonNull(destination, "destination");
+        int count = dirtySize;
+        if (count == 0) return 0;
+        if (destination.length < count) {
+            throw new IllegalArgumentException(
+                    "destination too small: need " + count + ", got " + destination.length
+            );
+        }
+
+        Arrays.sort(dirtyIds, 0, count);
+        System.arraycopy(dirtyIds, 0, destination, 0, count);
+
+        for (int i = 0; i < count; i++) {
             dirtyMembership.clear(dirtyIds[i]);
         }
         dirtySize = 0;
-        return result;
+        return count;
     }
 
     private void ensureCapacity(int required) {
