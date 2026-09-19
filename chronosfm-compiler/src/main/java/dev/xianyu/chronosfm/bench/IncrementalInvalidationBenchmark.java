@@ -5,7 +5,7 @@ import dev.xianyu.chronosfm.model.ProgramModel;
 import dev.xianyu.chronosfm.model.StatementModel;
 import dev.xianyu.chronosfm.model.TriggerModel;
 import dev.xianyu.chronosfm.runtime.EndpointDescriptor;
-import dev.xianyu.chronosfm.runtime.IncrementalRuntimeIndex;
+import dev.xianyu.chronosfm.runtime.PersistentTransferGraph;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,44 +32,44 @@ public final class IncrementalInvalidationBenchmark {
             ));
         }
 
-        var program = new ProgramModel(List.of(
+        var plan = new ChronoSfmCompiler().compile(new ProgramModel(List.of(
                 new TriggerModel.Timer(1, TriggerModel.Alignment.LOCAL, 0, statements)
-        ));
-        var plan = new ChronoSfmCompiler().compile(program);
-        var runtime = new IncrementalRuntimeIndex(plan.dependencyIndex());
+        )));
+        var graph = new PersistentTransferGraph(plan.dependencyIndex());
+        var handles = new PersistentTransferGraph.EndpointHandle[regions];
 
         for (int i = 0; i < regions; i++) {
-            runtime.upsertEndpoint(new EndpointDescriptor(
+            handles[i] = graph.bind(new EndpointDescriptor(
                     i,
                     Set.of("dest-" + i),
                     Set.of("item:" + (i % 128)),
                     0
             ));
         }
-        runtime.drainDirtyRegions();
+        graph.drainDirtyRegions();
 
         long start = System.nanoTime();
         for (int i = 0; i < changes; i++) {
-            runtime.endpointStateChanged(i);
+            graph.endpointStateChanged(handles[i]);
         }
         long elapsed = System.nanoTime() - start;
-        int dirty = runtime.dirtyCount();
+        int dirty = graph.dirtyCount();
 
         if (dirty != changes) {
             throw new IllegalStateException("Expected " + changes + " dirty regions, got " + dirty);
         }
-        if (runtime.graph().structuralRebindCount() != regions) {
+        if (graph.structuralRebindCount() != regions) {
             throw new IllegalStateException("Hot updates unexpectedly rebuilt structural bindings");
         }
 
         System.out.printf(
-                "Persistent frontier: %,d total regions, %,d hot endpoint changes -> %,d dirty regions in %.3f ms (%.1f ns/change), structuralRebinds=%,d%n",
+                "Dense-handle frontier: %,d total regions, %,d hot endpoint changes -> %,d dirty regions in %.3f ms (%.1f ns/change), structuralRebinds=%,d%n",
                 regions,
                 changes,
                 dirty,
                 elapsed / 1_000_000.0,
                 elapsed / (double) changes,
-                runtime.graph().structuralRebindCount()
+                graph.structuralRebindCount()
         );
     }
 }
