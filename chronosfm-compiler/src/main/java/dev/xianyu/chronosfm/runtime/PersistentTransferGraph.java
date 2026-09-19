@@ -55,8 +55,7 @@ public final class PersistentTransferGraph {
         Integer slotObject = slotByEndpointId.get(endpoint.endpointId());
         BindingState previousBinding = slotObject == null ? null : bindingsBySlot[slotObject];
 
-        var delta = endpoints.upsert(endpoint);
-        if (!delta.changed()) return delta;
+        var structuralDelta = endpoints.upsert(endpoint);
 
         int slot;
         if (slotObject == null) {
@@ -66,7 +65,14 @@ public final class PersistentTransferGraph {
             slot = slotObject;
         }
 
-        if (delta.structureChanged()) {
+        if (previousBinding != null && endpoint.revision() < previousBinding.revision) {
+            throw new IllegalArgumentException(
+                    "endpoint revision cannot move backwards: "
+                            + previousBinding.revision + " -> " + endpoint.revision()
+            );
+        }
+
+        if (structuralDelta.structureChanged()) {
             int[] previousRegions = previousBinding == null
                     ? new int[0]
                     : previousBinding.dependentRegions;
@@ -83,13 +89,18 @@ public final class PersistentTransferGraph {
                     nextGeneration++
             );
             structuralRebindCount++;
-        } else {
-            BindingState stable = Objects.requireNonNull(previousBinding, "stable binding");
-            stable.revision = endpoint.revision();
-            invalidation.invalidateRegions(stable.dependentRegions);
-            hotStateUpdateCount++;
+            return new PersistentEndpointIndex.EndpointDelta(true, true);
         }
-        return delta;
+
+        BindingState stable = Objects.requireNonNull(previousBinding, "stable binding");
+        if (endpoint.revision() == stable.revision) {
+            return new PersistentEndpointIndex.EndpointDelta(false, false);
+        }
+
+        stable.revision = endpoint.revision();
+        invalidation.invalidateRegions(stable.dependentRegions);
+        hotStateUpdateCount++;
+        return new PersistentEndpointIndex.EndpointDelta(true, false);
     }
 
     public PersistentEndpointIndex.EndpointDelta remove(long endpointId) {
