@@ -45,6 +45,37 @@ class SparseInvalidationFrontierTest {
     }
 
     @Test
+    void reusableBufferDrainIsDeterministicAndAllocationFreeForCaller() {
+        var engine = emptyEngine();
+        int[] buffer = new int[4];
+
+        engine.invalidateRegion(999_999);
+        engine.invalidateRegion(7);
+        engine.invalidateRegion(42);
+
+        int count = engine.drainDirtyRegionsInto(buffer);
+        assertEquals(3, count);
+        assertArrayEquals(new int[]{7, 42, 999_999, 0}, buffer);
+        assertEquals(0, engine.dirtyCount());
+
+        assertEquals(0, engine.drainDirtyRegionsInto(buffer));
+    }
+
+    @Test
+    void undersizedReusableBufferFailsBeforeClearingFrontier() {
+        var engine = emptyEngine();
+        engine.invalidateRegion(1);
+        engine.invalidateRegion(2);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> engine.drainDirtyRegionsInto(new int[1])
+        );
+        assertEquals(2, engine.dirtyCount());
+        assertArrayEquals(new int[]{1, 2}, engine.drainDirtyRegions());
+    }
+
+    @Test
     void repeatedDrainReusesFrontierStorageSafely() {
         var engine = emptyEngine();
 
