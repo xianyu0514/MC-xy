@@ -13,6 +13,10 @@ public final class IncrementalRuntimeIndex {
         );
     }
 
+    public PersistentTransferGraph.EndpointHandle bindEndpoint(EndpointDescriptor endpoint) {
+        return graph.bind(endpoint);
+    }
+
     public PersistentEndpointIndex.EndpointDelta upsertEndpoint(EndpointDescriptor endpoint) {
         return graph.upsert(endpoint);
     }
@@ -25,8 +29,15 @@ public final class IncrementalRuntimeIndex {
         return graph.endpointStateChanged(endpointId);
     }
 
-    public boolean endpointStateChanged(long endpointId, long nextRevision) {
-        return graph.endpointStateChanged(endpointId, nextRevision);
+    public boolean endpointStateChanged(PersistentTransferGraph.EndpointHandle handle) {
+        return graph.endpointStateChanged(handle);
+    }
+
+    public boolean endpointStateChanged(
+            PersistentTransferGraph.EndpointHandle handle,
+            long nextRevision
+    ) {
+        return graph.endpointStateChanged(handle, nextRevision);
     }
 
     public PersistentEndpointIndex endpoints() {
