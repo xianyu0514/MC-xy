@@ -30,48 +30,73 @@ class PersistentTransferGraphTest {
     @Test
     void hotRevisionUpdateReusesStructuralBinding() {
         var graph = graph();
-        graph.upsert(new EndpointDescriptor(
+        var handle = graph.bind(new EndpointDescriptor(
                 9, Set.of("machine"), Set.of("item:iron"), 0
         ));
         assertArrayEquals(new int[]{0}, graph.drainDirtyRegions());
         assertEquals(1, graph.structuralRebindCount());
 
-        assertTrue(graph.endpointStateChanged(9, 1));
+        assertTrue(graph.endpointStateChanged(handle, 1));
         assertArrayEquals(new int[]{0}, graph.drainDirtyRegions());
         assertEquals(1, graph.structuralRebindCount());
         assertEquals(1, graph.hotStateUpdateCount());
-        assertArrayEquals(new int[]{0}, graph.binding(9).orElseThrow().dependentRegions());
+        assertArrayEquals(new int[]{0}, graph.binding(handle).orElseThrow().dependentRegions());
+        assertEquals(1, graph.binding(handle).orElseThrow().descriptor().revision());
     }
 
     @Test
     void structureChangeRebindsAndInvalidatesOldAndNewRegions() {
         var graph = graph();
-        graph.upsert(new EndpointDescriptor(
+        graph.bind(new EndpointDescriptor(
                 10, Set.of("machine"), Set.of("item:iron"), 0
         ));
         graph.drainDirtyRegions();
 
-        graph.upsert(new EndpointDescriptor(
+        var nextHandle = graph.bind(new EndpointDescriptor(
                 10, Set.of("machine"), Set.of("fluid:water"), 1
         ));
 
         assertArrayEquals(new int[]{0, 1}, graph.drainDirtyRegions());
         assertEquals(2, graph.structuralRebindCount());
         assertEquals(0, graph.hotStateUpdateCount());
-        assertArrayEquals(new int[]{1}, graph.binding(10).orElseThrow().dependentRegions());
+        assertArrayEquals(new int[]{1}, graph.binding(nextHandle).orElseThrow().dependentRegions());
     }
 
     @Test
     void staleRevisionCannotOverwriteNewerEndpointState() {
         var graph = graph();
-        graph.upsert(new EndpointDescriptor(
+        var handle = graph.bind(new EndpointDescriptor(
                 11, Set.of("machine"), Set.of("item:iron"), 5
         ));
         graph.drainDirtyRegions();
 
-        assertThrows(IllegalArgumentException.class, () -> graph.endpointStateChanged(11, 4));
-        assertEquals(5, graph.binding(11).orElseThrow().descriptor().revision());
-        assertEquals(5, graph.endpoints().revision(11));
+        assertThrows(IllegalArgumentException.class, () -> graph.endpointStateChanged(handle, 4));
+        assertEquals(5, graph.binding(handle).orElseThrow().descriptor().revision());
         assertEquals(0, graph.dirtyCount());
+    }
+
+    @Test
+    void staleDenseHandleCannotAffectReusedSlot() {
+        var graph = graph();
+        var oldHandle = graph.bind(new EndpointDescriptor(
+                20, Set.of("machine"), Set.of("item:iron"), 0
+        ));
+        graph.drainDirtyRegions();
+        graph.remove(20);
+        graph.drainDirtyRegions();
+
+        var newHandle = graph.bind(new EndpointDescriptor(
+                21, Set.of("machine"), Set.of("item:iron"), 0
+        ));
+        graph.drainDirtyRegions();
+
+        assertEquals(oldHandle.slot(), newHandle.slot(), "test expects slot reuse");
+        assertNotEquals(oldHandle.generation(), newHandle.generation());
+
+        assertFalse(graph.endpointStateChanged(oldHandle));
+        assertEquals(0, graph.dirtyCount());
+
+        assertTrue(graph.endpointStateChanged(newHandle));
+        assertArrayEquals(new int[]{0}, graph.drainDirtyRegions());
     }
 }
