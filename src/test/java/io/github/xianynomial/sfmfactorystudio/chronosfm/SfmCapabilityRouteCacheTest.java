@@ -7,66 +7,114 @@ import ca.teamdman.sfml.ast.NumberRangeSet;
 import ca.teamdman.sfml.ast.RoundRobin;
 import ca.teamdman.sfml.ast.Side;
 import ca.teamdman.sfml.ast.SideQualifier;
+import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class SfmCapabilityRouteCacheTest {
     @Test
-    void absoluteSidesWithoutRoundRobinAreCacheable() {
-        assertTrue(SfmCapabilityRouteCache.isStructurallyCacheable(new LabelAccess(
-                List.of(new Label("machines")),
-                new SideQualifier(List.of(Side.NORTH, Side.TOP, Side.NULL)),
-                NumberRangeSet.MAX_RANGE,
-                RoundRobin.disabled()
-        )));
+    void allSfmSideModesAreStructurallyCacheable() {
+        for (Side side : Side.values()) {
+            assertTrue(SfmCapabilityRouteCache.isStructurallyCacheable(new LabelAccess(
+                    List.of(new Label("machines")),
+                    new SideQualifier(List.of(side)),
+                    NumberRangeSet.MAX_RANGE,
+                    RoundRobin.disabled()
+            )));
+        }
     }
 
     @Test
-    void relativeSidesAreFailClosed() {
+    void emptyLabelSetFailsClosed() {
         assertFalse(SfmCapabilityRouteCache.isStructurallyCacheable(new LabelAccess(
-                List.of(new Label("machines")),
-                new SideQualifier(List.of(Side.FRONT)),
-                NumberRangeSet.MAX_RANGE,
-                RoundRobin.disabled()
-        )));
-    }
-
-    @Test
-    void roundRobinIsFailClosed() {
-        assertFalse(SfmCapabilityRouteCache.isStructurallyCacheable(new LabelAccess(
-                List.of(new Label("machines")),
+                List.of(),
                 SideQualifier.DEFAULT,
                 NumberRangeSet.MAX_RANGE,
-                new RoundRobin(RoundRobin.Behaviour.BY_BLOCK)
+                RoundRobin.disabled()
         )));
     }
 
     @Test
-    void routeTemplatePreservesLabelPositionAndSideOrder() {
-        LabelPositionHolder holder = LabelPositionHolder.empty()
-                .add("a", new BlockPos(1, 2, 3))
-                .add("b", new BlockPos(4, 5, 6));
+    void unmodifiedTemplateMatchesUpstreamLabelPositionOrder() {
+        LabelPositionHolder holder = sampleHolder();
+        LabelAccess upstream = access(RoundRobin.Behaviour.UNMODIFIED);
+        LabelAccess cached = access(RoundRobin.Behaviour.UNMODIFIED);
 
-        LabelAccess access = new LabelAccess(
-                List.of(new Label("a"), new Label("b")),
-                new SideQualifier(List.of(Side.NORTH, Side.TOP)),
-                NumberRangeSet.MAX_RANGE,
-                RoundRobin.disabled()
+        assertEquals(
+                simplify(upstream.getLabelledPositions(holder)),
+                simplify(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder))
         );
+    }
 
-        var routes = SfmCapabilityRouteCache.buildRoutesForTesting(access, holder);
+    @Test
+    void roundRobinByLabelMatchesUpstreamAcrossRepeatedCalls() {
+        LabelPositionHolder holder = sampleHolder();
+        LabelAccess upstream = access(RoundRobin.Behaviour.BY_LABEL);
+        LabelAccess cached = access(RoundRobin.Behaviour.BY_LABEL);
 
-        assertEquals(4, routes.size());
-        assertEquals("a", routes.get(0).label().name());
-        assertEquals(Direction.NORTH, routes.get(0).direction());
-        assertEquals(Direction.UP, routes.get(1).direction());
-        assertEquals("b", routes.get(2).label().name());
-        assertEquals(Direction.NORTH, routes.get(2).direction());
-        assertEquals(Direction.UP, routes.get(3).direction());
+        for (int i = 0; i < 12; i++) {
+            assertEquals(
+                    simplify(upstream.getLabelledPositions(holder)),
+                    simplify(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder)),
+                    "mismatch on round " + i
+            );
+        }
+    }
+
+    @Test
+    void roundRobinByBlockMatchesUpstreamIncludingCrossLabelDeduplication() {
+        LabelPositionHolder holder = sampleHolder();
+        LabelAccess upstream = access(RoundRobin.Behaviour.BY_BLOCK);
+        LabelAccess cached = access(RoundRobin.Behaviour.BY_BLOCK);
+
+        for (int i = 0; i < 12; i++) {
+            assertEquals(
+                    simplify(upstream.getLabelledPositions(holder)),
+                    simplify(SfmCapabilityRouteCache.selectCandidatesForTesting(cached, holder)),
+                    "mismatch on round " + i
+            );
+        }
+    }
+
+    private static LabelPositionHolder sampleHolder() {
+        BlockPos shared = new BlockPos(9, 9, 9);
+        return LabelPositionHolder.empty()
+                .add("a", new BlockPos(1, 2, 3))
+                .add("a", shared)
+                .add("b", new BlockPos(4, 5, 6))
+                .add("b", shared)
+                .add("c", new BlockPos(7, 8, 9));
+    }
+
+    private static LabelAccess access(RoundRobin.Behaviour behaviour) {
+        return new LabelAccess(
+                List.of(new Label("a"), new Label("b"), new Label("c")),
+                new SideQualifier(List.of(Side.FRONT, Side.NORTH, Side.NULL)),
+                NumberRangeSet.MAX_RANGE,
+                new RoundRobin(behaviour)
+        );
+    }
+
+    private static List<String> simplify(List<Pair<Label, BlockPos>> pairs) {
+        ArrayList<String> result = new ArrayList<>();
+        for (Pair<Label, BlockPos> pair : pairs) {
+            result.add(pair.getFirst().name() + "@" + pair.getSecond().asLong());
+        }
+        return result;
+    }
+
+    private static List<String> simplify(
+            List<SfmCapabilityRouteCache.RouteCandidate> candidates
+    ) {
+        ArrayList<String> result = new ArrayList<>();
+        for (var candidate : candidates) {
+            result.add(candidate.label().name() + "@" + candidate.position().asLong());
+        }
+        return result;
     }
 }

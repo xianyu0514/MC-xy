@@ -99,3 +99,8 @@ The integration layer includes a conservative diagnostic timing fast path for SF
 ### Throughput-floor enforcement in the SFM bridge
 
 The Manager tick redirect no longer invokes Factory Studio's optional TpsBackoff.tryAcquire/record/onProgramRan hooks. Even though those features default off, a configured tick budget can skip due executions and would invalidate ChronoSFM throughput claims. ChronoSFM now always executes every due legacy Program.tick and may gain TPS only by removing redundant work.
+
+
+### Route Template v2 research
+
+The SFM integration now models label-position structure once per LabelAccess instead of once per ResourceType. The template is designed to preserve all three upstream RoundRobin behaviours exactly. Relative FRONT/BACK/LEFT/RIGHT directions remain dynamic and are resolved from current BlockState every due tick; only label/position enumeration is persistent. The cache still never owns third-party capability objects or slot contents.

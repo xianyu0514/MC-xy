@@ -1,44 +1,49 @@
 package io.github.xianynomial.sfmfactorystudio.chronosfm;
 
 import ca.teamdman.sfm.common.capability.SFMBlockCapabilityResult;
+import ca.teamdman.sfm.common.label.LabelPositionHolder;
 import ca.teamdman.sfm.common.program.CapabilityConsumer;
 import ca.teamdman.sfm.common.program.ProgramContext;
 import ca.teamdman.sfm.common.resourcetype.ResourceType;
 import ca.teamdman.sfml.ast.Label;
 import ca.teamdman.sfml.ast.LabelAccess;
+import ca.teamdman.sfml.ast.RoundRobin;
 import ca.teamdman.sfml.ast.Side;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.BlockState;
 import org.apache.logging.log4j.Level;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Consumer;
 
 /**
- * Persistent structural route cache for SFM capability discovery.
+ * Persistent structural route template for SFM capability discovery.
  *
- * The cache intentionally stores only immutable route addresses
- * (label/position/absolute direction). It NEVER stores the third-party
- * capability object and NEVER stores slot contents. Every due tick still asks
- * SFM's own CableNetwork capability cache for the current capability, preserving
- * normal invalidation and insert/extract semantics.
+ * One template is stored per LabelAccess, independent of ResourceType. The
+ * template contains only stable label/position structure. It never retains a
+ * third-party capability, stack, slot state, or insert/extract result.
  *
- * Cache use is restricted to semantics that can be proven independent of
- * current BlockState:
- * - no round robin
- * - only TOP/BOTTOM/NORTH/SOUTH/EAST/WEST/NULL
- * - logger OFF (diagnostic logging retains the exact upstream path)
+ * Round-robin semantics are preserved by advancing the original LabelAccess
+ * RoundRobin object exactly once per ResourceType.forEachCapability invocation:
+ * - UNMODIFIED: visit all cached label/position pairs
+ * - BY_LABEL: choose one label, then visit all positions of that label
+ * - BY_BLOCK: choose one deduplicated label/position candidate
  *
- * LabelPositionHolder revisions are provided by a conservative mixin. If the
- * revision interface is unavailable, the optimization fails closed to upstream
- * ResourceType.forEachCapability.
+ * Relative sides remain dynamic: FRONT/BACK/LEFT/RIGHT are resolved from the
+ * current BlockState on every due tick. Absolute sides avoid that world read.
+ *
+ * Diagnostic logging uses upstream SFM unchanged, so cached execution is only
+ * used when the manager logger is OFF.
  */
 public final class SfmCapabilityRouteCache {
-    private static final Map<LabelAccess, IdentityHashMap<ResourceType<?, ?, ?>, Entry>> CACHE =
-            new WeakHashMap<>();
+    private static final Map<LabelAccess, Entry> CACHE =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private static long hitCount;
     private static long missCount;
@@ -47,7 +52,6 @@ public final class SfmCapabilityRouteCache {
     private SfmCapabilityRouteCache() {
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public static <STACK, ITEM, CAP> void forEachCapability(
             ResourceType<STACK, ITEM, CAP> resourceType,
             ProgramContext context,
@@ -60,9 +64,9 @@ public final class SfmCapabilityRouteCache {
             return;
         }
 
-        Object labels = context.getLabelPositionHolder();
+        Object labelsIdentity = context.getLabelPositionHolder();
         ChronoRevisionSource revisionSource =
-                labels instanceof ChronoRevisionSource source ? source : null;
+                labelsIdentity instanceof ChronoRevisionSource source ? source : null;
         if (revisionSource == null) {
             bypassCount++;
             resourceType.forEachCapability(context, labelAccess, consumer);
@@ -70,53 +74,80 @@ public final class SfmCapabilityRouteCache {
         }
 
         long revision = revisionSource.chronosfm$getRevision();
-        Entry entry = getEntry(labelAccess, resourceType);
+        Entry entry = CACHE.get(labelAccess);
         if (entry == null
-                || entry.labelHolderIdentity != labels
+                || entry.labelHolderIdentity != labelsIdentity
                 || entry.labelRevision != revision) {
-            RouteAddress[] routes = buildRoutes(labelAccess, context);
-            entry = new Entry(labels, revision, routes);
-            putEntry(labelAccess, resourceType, entry);
+            entry = new Entry(
+                    labelsIdentity,
+                    revision,
+                    RouteTemplate.compile(labelAccess, context.getLabelPositionHolder())
+            );
+            CACHE.put(labelAccess, entry);
             missCount++;
         } else {
             hitCount++;
         }
 
-        for (RouteAddress route : entry.routes) {
+        RouteTemplate template = entry.template;
+        template.visitDueCandidates(labelAccess.roundRobin(), candidate ->
+                visitCandidate(resourceType, context, labelAccess, candidate, consumer)
+        );
+    }
+
+    private static <STACK, ITEM, CAP> void visitCandidate(
+            ResourceType<STACK, ITEM, CAP> resourceType,
+            ProgramContext context,
+            LabelAccess labelAccess,
+            RouteCandidate candidate,
+            CapabilityConsumer<CAP> consumer
+    ) {
+        BlockState state = null;
+        if (requiresBlockState(labelAccess)) {
+            state = context.getLevel().getBlockState(candidate.position);
+        }
+
+        for (Side side : labelAccess.sides().sides()) {
+            Direction direction = state == null
+                    ? absoluteDirection(side)
+                    : side.resolve(state);
+
             SFMBlockCapabilityResult<CAP> maybeCapability = context.getNetwork().getCapability(
                     resourceType.capabilityKind(),
-                    route.position,
-                    route.direction,
+                    candidate.position,
+                    direction,
                     context.getLogger()
             );
             if (!maybeCapability.isPresent()) continue;
 
             consumer.accept(
-                    route.label,
-                    route.position,
-                    route.direction,
+                    candidate.label,
+                    candidate.position,
+                    direction,
                     maybeCapability.unwrap()
             );
         }
     }
 
     static boolean isStructurallyCacheable(LabelAccess labelAccess) {
-        if (labelAccess == null || labelAccess.roundRobin().isEnabled()) return false;
-        for (Side side : labelAccess.sides().sides()) {
-            if (!isAbsolute(side)) return false;
-        }
-        return true;
+        return labelAccess != null && !labelAccess.labels().isEmpty();
     }
 
-    static List<RouteAddress> buildRoutesForTesting(
+    static List<RouteCandidate> selectCandidatesForTesting(
             LabelAccess labelAccess,
-            ca.teamdman.sfm.common.label.LabelPositionHolder holder
+            LabelPositionHolder holder
     ) {
-        return List.of(buildRoutes(labelAccess, holder));
+        RouteTemplate template = RouteTemplate.compile(labelAccess, holder);
+        ArrayList<RouteCandidate> result = new ArrayList<>();
+        template.visitDueCandidates(labelAccess.roundRobin(), result::add);
+        return List.copyOf(result);
     }
 
     private static boolean canCache(ProgramContext context, LabelAccess labelAccess) {
-        if (context == null || context.getLabelPositionHolder() == null || context.getNetwork() == null) {
+        if (context == null
+                || context.getLevel() == null
+                || context.getLabelPositionHolder() == null
+                || context.getNetwork() == null) {
             return false;
         }
         if (context.getLogger() != null && context.getLogger().getLogLevel() != Level.OFF) {
@@ -125,30 +156,17 @@ public final class SfmCapabilityRouteCache {
         return isStructurallyCacheable(labelAccess);
     }
 
-    private static RouteAddress[] buildRoutes(LabelAccess labelAccess, ProgramContext context) {
-        return buildRoutes(labelAccess, context.getLabelPositionHolder());
-    }
-
-    private static RouteAddress[] buildRoutes(
-            LabelAccess labelAccess,
-            ca.teamdman.sfm.common.label.LabelPositionHolder holder
-    ) {
-        ArrayList<RouteAddress> routes = new ArrayList<>();
-        for (var pair : labelAccess.getLabelledPositions(holder)) {
-            Label label = pair.getFirst();
-            BlockPos position = pair.getSecond().immutable();
-            for (Side side : labelAccess.sides().sides()) {
-                routes.add(new RouteAddress(label, position, absoluteDirection(side)));
+    private static boolean requiresBlockState(LabelAccess labelAccess) {
+        for (Side side : labelAccess.sides().sides()) {
+            switch (side) {
+                case LEFT, RIGHT, FRONT, BACK -> {
+                    return true;
+                }
+                default -> {
+                }
             }
         }
-        return routes.toArray(RouteAddress[]::new);
-    }
-
-    private static boolean isAbsolute(Side side) {
-        return switch (side) {
-            case TOP, BOTTOM, NORTH, SOUTH, EAST, WEST, NULL -> true;
-            case LEFT, RIGHT, FRONT, BACK -> false;
-        };
+        return false;
     }
 
     private static Direction absoluteDirection(Side side) {
@@ -161,29 +179,16 @@ public final class SfmCapabilityRouteCache {
             case WEST -> Direction.WEST;
             case NULL -> null;
             case LEFT, RIGHT, FRONT, BACK ->
-                    throw new IllegalArgumentException("relative side is not cacheable: " + side);
+                    throw new IllegalArgumentException("relative side requires current BlockState: " + side);
         };
-    }
-
-    private static Entry getEntry(
-            LabelAccess access,
-            ResourceType<?, ?, ?> resourceType
-    ) {
-        IdentityHashMap<ResourceType<?, ?, ?>, Entry> byType = CACHE.get(access);
-        return byType == null ? null : byType.get(resourceType);
-    }
-
-    private static void putEntry(
-            LabelAccess access,
-            ResourceType<?, ?, ?> resourceType,
-            Entry entry
-    ) {
-        CACHE.computeIfAbsent(access, ignored -> new IdentityHashMap<>())
-                .put(resourceType, entry);
     }
 
     public static void clear() {
         CACHE.clear();
+    }
+
+    static int cachedTemplateCountForTesting() {
+        return CACHE.size();
     }
 
     static long hitCountForTesting() {
@@ -207,14 +212,94 @@ public final class SfmCapabilityRouteCache {
     private record Entry(
             Object labelHolderIdentity,
             long labelRevision,
-            RouteAddress[] routes
+            RouteTemplate template
     ) {
     }
 
-    record RouteAddress(
+    record RouteCandidate(Label label, BlockPos position) {
+    }
+
+    private static final class RouteTemplate {
+        private final RoundRobin.Behaviour behaviour;
+        private final RouteCandidate[] allCandidates;
+        private final LabelBucket[] labelBuckets;
+        private final RouteCandidate[] deduplicatedCandidates;
+
+        private RouteTemplate(
+                RoundRobin.Behaviour behaviour,
+                RouteCandidate[] allCandidates,
+                LabelBucket[] labelBuckets,
+                RouteCandidate[] deduplicatedCandidates
+        ) {
+            this.behaviour = behaviour;
+            this.allCandidates = allCandidates;
+            this.labelBuckets = labelBuckets;
+            this.deduplicatedCandidates = deduplicatedCandidates;
+        }
+
+        static RouteTemplate compile(LabelAccess access, LabelPositionHolder holder) {
+            RoundRobin.Behaviour behaviour = access.roundRobin().getBehaviour();
+            List<Label> labels = access.labels();
+
+            ArrayList<RouteCandidate> all = new ArrayList<>();
+            LabelBucket[] buckets = new LabelBucket[labels.size()];
+            HashSet<Long> seenPositions = new HashSet<>();
+            ArrayList<RouteCandidate> deduplicated = new ArrayList<>();
+
+            for (int labelIndex = 0; labelIndex < labels.size(); labelIndex++) {
+                Label label = labels.get(labelIndex);
+                ArrayList<RouteCandidate> perLabel = new ArrayList<>();
+                var iterator = holder.getPositions(label.name()).blockPosIterator();
+                while (iterator.hasNext()) {
+                    BlockPos position = iterator.next().immutable();
+                    RouteCandidate candidate = new RouteCandidate(label, position);
+                    all.add(candidate);
+                    perLabel.add(candidate);
+                    if (seenPositions.add(position.asLong())) {
+                        deduplicated.add(candidate);
+                    }
+                }
+                buckets[labelIndex] = new LabelBucket(
+                        label,
+                        perLabel.toArray(RouteCandidate[]::new)
+                );
+            }
+
+            return new RouteTemplate(
+                    behaviour,
+                    all.toArray(RouteCandidate[]::new),
+                    buckets,
+                    deduplicated.toArray(RouteCandidate[]::new)
+            );
+        }
+
+        void visitDueCandidates(
+                RoundRobin roundRobin,
+                Consumer<RouteCandidate> consumer
+        ) {
+            switch (behaviour) {
+                case UNMODIFIED -> {
+                    for (RouteCandidate candidate : allCandidates) consumer.accept(candidate);
+                }
+                case BY_LABEL -> {
+                    int count = labelBuckets.length;
+                    if (count == 0) return;
+                    int index = roundRobin.next(count);
+                    RouteCandidate[] candidates = labelBuckets[index].candidates;
+                    for (RouteCandidate candidate : candidates) consumer.accept(candidate);
+                }
+                case BY_BLOCK -> {
+                    int count = deduplicatedCandidates.length;
+                    if (count == 0) return;
+                    consumer.accept(deduplicatedCandidates[roundRobin.next(count)]);
+                }
+            }
+        }
+    }
+
+    private record LabelBucket(
             Label label,
-            BlockPos position,
-            Direction direction
+            RouteCandidate[] candidates
     ) {
     }
 }
