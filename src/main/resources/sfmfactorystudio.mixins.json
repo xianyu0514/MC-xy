@@ -12,7 +12,8 @@
     "BlockNetworkRevisionMixin",
     "CapabilityCacheRevisionMixin",
     "IoCapabilityDiscoveryMixin",
-    "BlockTickFastPathMixin"
+    "BlockTickFastPathMixin",
+    "ProgramTickFastPathMixin"
   ],
   "injectors": {
     "defaultRequire": 0
