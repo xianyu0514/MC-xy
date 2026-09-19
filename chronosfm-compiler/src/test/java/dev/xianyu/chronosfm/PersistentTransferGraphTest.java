@@ -76,6 +76,34 @@ class PersistentTransferGraphTest {
     }
 
     @Test
+    void sameStructureUpsertRoutesRevisionThroughGraphStateOnly() {
+        var graph = graph();
+        var handle = graph.bind(new EndpointDescriptor(
+                15, Set.of("machine"), Set.of("item:iron"), 0
+        ));
+        graph.drainDirtyRegions();
+
+        var delta = graph.upsert(new EndpointDescriptor(
+                15, Set.of("machine"), Set.of("item:iron"), 3
+        ));
+
+        assertTrue(delta.changed());
+        assertFalse(delta.structureChanged());
+        assertEquals(1, graph.structuralRebindCount());
+        assertEquals(1, graph.hotStateUpdateCount());
+        assertEquals(3, graph.binding(handle).orElseThrow().descriptor().revision());
+        assertArrayEquals(new int[]{0}, graph.drainDirtyRegions());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> graph.upsert(new EndpointDescriptor(
+                        15, Set.of("machine"), Set.of("item:iron"), 2
+                ))
+        );
+        assertEquals(3, graph.binding(handle).orElseThrow().descriptor().revision());
+    }
+
+    @Test
     void staleDenseHandleCannotAffectReusedSlot() {
         var graph = graph();
         var oldHandle = graph.bind(new EndpointDescriptor(
