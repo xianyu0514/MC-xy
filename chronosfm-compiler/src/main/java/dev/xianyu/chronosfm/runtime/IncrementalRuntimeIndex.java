@@ -55,4 +55,8 @@ public final class IncrementalRuntimeIndex {
     public int[] drainDirtyRegions() {
         return graph.drainDirtyRegions();
     }
+
+    public int drainDirtyRegionsInto(int[] destination) {
+        return graph.drainDirtyRegionsInto(destination);
+    }
 }
