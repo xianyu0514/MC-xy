@@ -47,7 +47,8 @@ public final class BindingReuseBenchmark {
         )));
         DependencyIndex dependencies = plan.dependencyIndex();
         var graph = new PersistentTransferGraph(dependencies);
-        for (EndpointDescriptor descriptor : descriptors) graph.upsert(descriptor);
+        var handles = new PersistentTransferGraph.EndpointHandle[regions];
+        for (int i = 0; i < regions; i++) handles[i] = graph.bind(descriptors[i]);
         graph.drainDirtyRegions();
 
         int[] ids = new int[changes];
@@ -58,14 +59,13 @@ public final class BindingReuseBenchmark {
         long[] cached = new long[repetitions];
         long[] recompute = new long[repetitions];
 
-        // Warmup both paths.
         for (int warm = 0; warm < 3; warm++) {
-            runCached(graph, ids);
+            runCached(graph, handles, ids);
             runRecompute(dependencies, descriptors, ids);
         }
 
         for (int rep = 0; rep < repetitions; rep++) {
-            cached[rep] = runCached(graph, ids);
+            cached[rep] = runCached(graph, handles, ids);
             recompute[rep] = runRecompute(dependencies, descriptors, ids);
         }
 
@@ -75,7 +75,7 @@ public final class BindingReuseBenchmark {
         long recomputeMedian = recompute[recompute.length / 2];
 
         System.out.printf(
-                "Binding reuse: %,d regions / %,d random hot changes -> cached %.3f ms, dependency-recompute %.3f ms, ratio %.2fx%n",
+                "Binding reuse: %,d regions / %,d random hot changes -> dense-handle %.3f ms, dependency-recompute %.3f ms, ratio %.2fx%n",
                 regions,
                 changes,
                 cachedMedian / 1_000_000.0,
@@ -84,9 +84,13 @@ public final class BindingReuseBenchmark {
         );
     }
 
-    private static long runCached(PersistentTransferGraph graph, int[] ids) {
+    private static long runCached(
+            PersistentTransferGraph graph,
+            PersistentTransferGraph.EndpointHandle[] handles,
+            int[] ids
+    ) {
         long start = System.nanoTime();
-        for (int id : ids) graph.endpointStateChanged(id);
+        for (int id : ids) graph.endpointStateChanged(handles[id]);
         long elapsed = System.nanoTime() - start;
 
         if (graph.dirtyCount() != ids.length) {
