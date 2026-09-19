@@ -48,9 +48,12 @@ public final class SfmStructureStamp {
 
         SFMBlockCapabilityCacheForLevel capabilityCache = network.getLevelCapabilityCache();
 
-        if (!(labels instanceof ChronoRevisionSource labelSource)) return Optional.empty();
-        if (!(network instanceof ChronoRevisionSource networkSource)) return Optional.empty();
-        if (!(capabilityCache instanceof ChronoRevisionSource capabilitySource)) return Optional.empty();
+        ChronoRevisionSource labelSource = asRevisionSource(labels);
+        ChronoRevisionSource networkSource = asRevisionSource(network);
+        ChronoRevisionSource capabilitySource = asRevisionSource(capabilityCache);
+        if (labelSource == null || networkSource == null || capabilitySource == null) {
+            return Optional.empty();
+        }
 
         return Optional.of(new SfmStructureStamp(
                 labels,
@@ -68,13 +71,20 @@ public final class SfmStructureStamp {
         if (context.getNetwork() != network) return false;
         if (network.getLevelCapabilityCache() != capabilityCache) return false;
 
-        if (!(labels instanceof ChronoRevisionSource labelSource)) return false;
-        if (!(network instanceof ChronoRevisionSource networkSource)) return false;
-        if (!(capabilityCache instanceof ChronoRevisionSource capabilitySource)) return false;
+        ChronoRevisionSource labelSource = asRevisionSource(labels);
+        ChronoRevisionSource networkSource = asRevisionSource(network);
+        ChronoRevisionSource capabilitySource = asRevisionSource(capabilityCache);
+        if (labelSource == null || networkSource == null || capabilitySource == null) {
+            return false;
+        }
 
         return labelSource.chronosfm$getRevision() == labelRevision
                 && networkSource.chronosfm$getRevision() == networkRevision
                 && capabilitySource.chronosfm$getRevision() == capabilityRevision;
+    }
+
+    private static ChronoRevisionSource asRevisionSource(Object value) {
+        return value instanceof ChronoRevisionSource source ? source : null;
     }
 
     public long labelRevision() {
