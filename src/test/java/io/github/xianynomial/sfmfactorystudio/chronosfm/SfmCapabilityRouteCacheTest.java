@@ -81,6 +81,30 @@ class SfmCapabilityRouteCacheTest {
         }
     }
 
+    @Test
+    void templateRetainsOnlyRepresentationNeededByActiveMode() {
+        LabelPositionHolder holder = sampleHolder();
+
+        var unmodified = SfmCapabilityRouteCache.templateStatsForTesting(
+                access(RoundRobin.Behaviour.UNMODIFIED), holder
+        );
+        var byLabel = SfmCapabilityRouteCache.templateStatsForTesting(
+                access(RoundRobin.Behaviour.BY_LABEL), holder
+        );
+        var byBlock = SfmCapabilityRouteCache.templateStatsForTesting(
+                access(RoundRobin.Behaviour.BY_BLOCK), holder
+        );
+
+        assertEquals(5, unmodified.candidateCount());
+        assertEquals(1, unmodified.retainedCandidateArrayCount());
+
+        assertEquals(5, byLabel.candidateCount());
+        assertEquals(3, byLabel.retainedCandidateArrayCount());
+
+        assertEquals(4, byBlock.candidateCount());
+        assertEquals(1, byBlock.retainedCandidateArrayCount());
+    }
+
     private static LabelPositionHolder sampleHolder() {
         BlockPos shared = new BlockPos(9, 9, 9);
         return LabelPositionHolder.empty()

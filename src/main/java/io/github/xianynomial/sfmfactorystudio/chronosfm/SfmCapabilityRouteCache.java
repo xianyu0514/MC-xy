@@ -9,6 +9,7 @@ import ca.teamdman.sfml.ast.Label;
 import ca.teamdman.sfml.ast.LabelAccess;
 import ca.teamdman.sfml.ast.RoundRobin;
 import ca.teamdman.sfml.ast.Side;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
@@ -16,30 +17,29 @@ import org.apache.logging.log4j.Level;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.function.Consumer;
 
 /**
  * Persistent structural route template for SFM capability discovery.
  *
- * One template is stored per LabelAccess, independent of ResourceType. The
- * template contains only stable label/position structure. It never retains a
- * third-party capability, stack, slot state, or insert/extract result.
+ * Production representation is allocation-stable and mode-specific:
  *
- * Round-robin semantics are preserved by advancing the original LabelAccess
- * RoundRobin object exactly once per ResourceType.forEachCapability invocation:
- * - UNMODIFIED: visit all cached label/position pairs
- * - BY_LABEL: choose one label, then visit all positions of that label
- * - BY_BLOCK: choose one deduplicated label/position candidate
+ * UNMODIFIED:
+ *   Label[] + BlockPos[]
  *
- * Relative sides remain dynamic: FRONT/BACK/LEFT/RIGHT are resolved from the
- * current BlockState on every due tick. Absolute sides avoid that world read.
+ * ROUND ROBIN BY LABEL:
+ *   one LabelBucket per label, each with BlockPos[]
  *
- * Diagnostic logging uses upstream SFM unchanged, so cached execution is only
- * used when the manager logger is OFF.
+ * ROUND ROBIN BY BLOCK:
+ *   deduplicated Label[] + BlockPos[]
+ *
+ * Exactly one of those representations is retained by a template, so a large
+ * label topology is not duplicated two or three times merely to support modes
+ * that the current LabelAccess never uses.
+ *
+ * No capability object, stack, slot state or transfer result is cached.
  */
 public final class SfmCapabilityRouteCache {
     private static final Map<LabelAccess, Entry> CACHE =
@@ -90,8 +90,10 @@ public final class SfmCapabilityRouteCache {
         }
 
         RouteTemplate template = entry.template;
-        template.visitDueCandidates(labelAccess.roundRobin(), candidate ->
-                visitCandidate(resourceType, context, labelAccess, candidate, consumer)
+        template.visitDueCandidates(
+                labelAccess.roundRobin(),
+                (label, position) ->
+                        visitCandidate(resourceType, context, labelAccess, label, position, consumer)
         );
     }
 
@@ -99,12 +101,13 @@ public final class SfmCapabilityRouteCache {
             ResourceType<STACK, ITEM, CAP> resourceType,
             ProgramContext context,
             LabelAccess labelAccess,
-            RouteCandidate candidate,
+            Label label,
+            BlockPos position,
             CapabilityConsumer<CAP> consumer
     ) {
         BlockState state = null;
         if (requiresBlockState(labelAccess)) {
-            state = context.getLevel().getBlockState(candidate.position);
+            state = context.getLevel().getBlockState(position);
         }
 
         for (Side side : labelAccess.sides().sides()) {
@@ -114,18 +117,13 @@ public final class SfmCapabilityRouteCache {
 
             SFMBlockCapabilityResult<CAP> maybeCapability = context.getNetwork().getCapability(
                     resourceType.capabilityKind(),
-                    candidate.position,
+                    position,
                     direction,
                     context.getLogger()
             );
             if (!maybeCapability.isPresent()) continue;
 
-            consumer.accept(
-                    candidate.label,
-                    candidate.position,
-                    direction,
-                    maybeCapability.unwrap()
-            );
+            consumer.accept(label, position, direction, maybeCapability.unwrap());
         }
     }
 
@@ -139,8 +137,18 @@ public final class SfmCapabilityRouteCache {
     ) {
         RouteTemplate template = RouteTemplate.compile(labelAccess, holder);
         ArrayList<RouteCandidate> result = new ArrayList<>();
-        template.visitDueCandidates(labelAccess.roundRobin(), result::add);
+        template.visitDueCandidates(
+                labelAccess.roundRobin(),
+                (label, position) -> result.add(new RouteCandidate(label, position))
+        );
         return List.copyOf(result);
+    }
+
+    static TemplateStats templateStatsForTesting(
+            LabelAccess labelAccess,
+            LabelPositionHolder holder
+    ) {
+        return RouteTemplate.compile(labelAccess, holder).stats();
     }
 
     private static boolean canCache(ProgramContext context, LabelAccess labelAccess) {
@@ -219,87 +227,164 @@ public final class SfmCapabilityRouteCache {
     record RouteCandidate(Label label, BlockPos position) {
     }
 
+    record TemplateStats(
+            RoundRobin.Behaviour behaviour,
+            int candidateCount,
+            int retainedCandidateArrayCount
+    ) {
+    }
+
+    @FunctionalInterface
+    private interface CandidateConsumer {
+        void accept(Label label, BlockPos position);
+    }
+
     private static final class RouteTemplate {
         private final RoundRobin.Behaviour behaviour;
-        private final RouteCandidate[] allCandidates;
+
+        // UNMODIFIED / BY_BLOCK only.
+        private final Label[] labels;
+        private final BlockPos[] positions;
+
+        // BY_LABEL only.
         private final LabelBucket[] labelBuckets;
-        private final RouteCandidate[] deduplicatedCandidates;
 
         private RouteTemplate(
                 RoundRobin.Behaviour behaviour,
-                RouteCandidate[] allCandidates,
-                LabelBucket[] labelBuckets,
-                RouteCandidate[] deduplicatedCandidates
+                Label[] labels,
+                BlockPos[] positions,
+                LabelBucket[] labelBuckets
         ) {
             this.behaviour = behaviour;
-            this.allCandidates = allCandidates;
+            this.labels = labels;
+            this.positions = positions;
             this.labelBuckets = labelBuckets;
-            this.deduplicatedCandidates = deduplicatedCandidates;
         }
 
         static RouteTemplate compile(LabelAccess access, LabelPositionHolder holder) {
-            RoundRobin.Behaviour behaviour = access.roundRobin().getBehaviour();
-            List<Label> labels = access.labels();
+            return switch (access.roundRobin().getBehaviour()) {
+                case UNMODIFIED -> compileUnmodified(access, holder);
+                case BY_LABEL -> compileByLabel(access, holder);
+                case BY_BLOCK -> compileByBlock(access, holder);
+            };
+        }
 
-            ArrayList<RouteCandidate> all = new ArrayList<>();
-            LabelBucket[] buckets = new LabelBucket[labels.size()];
-            HashSet<Long> seenPositions = new HashSet<>();
-            ArrayList<RouteCandidate> deduplicated = new ArrayList<>();
+        private static RouteTemplate compileUnmodified(
+                LabelAccess access,
+                LabelPositionHolder holder
+        ) {
+            ArrayList<Label> labels = new ArrayList<>();
+            ArrayList<BlockPos> positions = new ArrayList<>();
 
-            for (int labelIndex = 0; labelIndex < labels.size(); labelIndex++) {
-                Label label = labels.get(labelIndex);
-                ArrayList<RouteCandidate> perLabel = new ArrayList<>();
+            for (Label label : access.labels()) {
                 var iterator = holder.getPositions(label.name()).blockPosIterator();
                 while (iterator.hasNext()) {
-                    BlockPos position = iterator.next().immutable();
-                    RouteCandidate candidate = new RouteCandidate(label, position);
-                    all.add(candidate);
-                    perLabel.add(candidate);
-                    if (seenPositions.add(position.asLong())) {
-                        deduplicated.add(candidate);
-                    }
+                    labels.add(label);
+                    positions.add(iterator.next().immutable());
                 }
-                buckets[labelIndex] = new LabelBucket(
-                        label,
-                        perLabel.toArray(RouteCandidate[]::new)
-                );
             }
 
             return new RouteTemplate(
-                    behaviour,
-                    all.toArray(RouteCandidate[]::new),
-                    buckets,
-                    deduplicated.toArray(RouteCandidate[]::new)
+                    RoundRobin.Behaviour.UNMODIFIED,
+                    labels.toArray(Label[]::new),
+                    positions.toArray(BlockPos[]::new),
+                    null
+            );
+        }
+
+        private static RouteTemplate compileByLabel(
+                LabelAccess access,
+                LabelPositionHolder holder
+        ) {
+            List<Label> sourceLabels = access.labels();
+            LabelBucket[] buckets = new LabelBucket[sourceLabels.size()];
+
+            for (int i = 0; i < sourceLabels.size(); i++) {
+                Label label = sourceLabels.get(i);
+                ArrayList<BlockPos> positions = new ArrayList<>();
+                var iterator = holder.getPositions(label.name()).blockPosIterator();
+                while (iterator.hasNext()) {
+                    positions.add(iterator.next().immutable());
+                }
+                buckets[i] = new LabelBucket(label, positions.toArray(BlockPos[]::new));
+            }
+
+            return new RouteTemplate(
+                    RoundRobin.Behaviour.BY_LABEL,
+                    null,
+                    null,
+                    buckets
+            );
+        }
+
+        private static RouteTemplate compileByBlock(
+                LabelAccess access,
+                LabelPositionHolder holder
+        ) {
+            ArrayList<Label> labels = new ArrayList<>();
+            ArrayList<BlockPos> positions = new ArrayList<>();
+            LongOpenHashSet seen = new LongOpenHashSet();
+
+            for (Label label : access.labels()) {
+                var iterator = holder.getPositions(label.name()).blockPosIterator();
+                while (iterator.hasNext()) {
+                    BlockPos position = iterator.next().immutable();
+                    if (!seen.add(position.asLong())) continue;
+                    labels.add(label);
+                    positions.add(position);
+                }
+            }
+
+            return new RouteTemplate(
+                    RoundRobin.Behaviour.BY_BLOCK,
+                    labels.toArray(Label[]::new),
+                    positions.toArray(BlockPos[]::new),
+                    null
             );
         }
 
         void visitDueCandidates(
                 RoundRobin roundRobin,
-                Consumer<RouteCandidate> consumer
+                CandidateConsumer consumer
         ) {
             switch (behaviour) {
-                case UNMODIFIED -> {
-                    for (RouteCandidate candidate : allCandidates) consumer.accept(candidate);
-                }
+                case UNMODIFIED -> visitAll(consumer);
                 case BY_LABEL -> {
                     int count = labelBuckets.length;
                     if (count == 0) return;
-                    int index = roundRobin.next(count);
-                    RouteCandidate[] candidates = labelBuckets[index].candidates;
-                    for (RouteCandidate candidate : candidates) consumer.accept(candidate);
+                    LabelBucket bucket = labelBuckets[roundRobin.next(count)];
+                    for (BlockPos position : bucket.positions) {
+                        consumer.accept(bucket.label, position);
+                    }
                 }
                 case BY_BLOCK -> {
-                    int count = deduplicatedCandidates.length;
+                    int count = positions.length;
                     if (count == 0) return;
-                    consumer.accept(deduplicatedCandidates[roundRobin.next(count)]);
+                    int index = roundRobin.next(count);
+                    consumer.accept(labels[index], positions[index]);
                 }
             }
         }
+
+        private void visitAll(CandidateConsumer consumer) {
+            for (int i = 0; i < positions.length; i++) {
+                consumer.accept(labels[i], positions[i]);
+            }
+        }
+
+        TemplateStats stats() {
+            return switch (behaviour) {
+                case UNMODIFIED, BY_BLOCK ->
+                        new TemplateStats(behaviour, positions.length, 1);
+                case BY_LABEL -> {
+                    int count = 0;
+                    for (LabelBucket bucket : labelBuckets) count += bucket.positions.length;
+                    yield new TemplateStats(behaviour, count, labelBuckets.length);
+                }
+            };
+        }
     }
 
-    private record LabelBucket(
-            Label label,
-            RouteCandidate[] candidates
-    ) {
+    private record LabelBucket(Label label, BlockPos[] positions) {
     }
 }

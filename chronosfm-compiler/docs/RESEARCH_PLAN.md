@@ -104,3 +104,8 @@ The Manager tick redirect no longer invokes Factory Studio's optional TpsBackoff
 ### Route Template v2 research
 
 The SFM integration now models label-position structure once per LabelAccess instead of once per ResourceType. The template is designed to preserve all three upstream RoundRobin behaviours exactly. Relative FRONT/BACK/LEFT/RIGHT directions remain dynamic and are resolved from current BlockState every due tick; only label/position enumeration is persistent. The cache still never owns third-party capability objects or slot contents.
+
+
+### Route Template primitive-structure milestone
+
+The route template no longer retains RouteCandidate objects or all possible mode representations simultaneously. UNMODIFIED and BY_BLOCK use parallel Label[]/BlockPos[] arrays; BY_LABEL retains only per-label BlockPos[] buckets. This keeps persistent cache memory O(actual candidate structure) with one representation for the active mode and avoids a 2-3x topology duplication at million-endpoint scale.
