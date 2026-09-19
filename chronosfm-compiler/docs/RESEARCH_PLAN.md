@@ -33,13 +33,15 @@ Cache semantic label/resource/slot relationships while reusing SFM's existing Ca
 
 Current research branch provides the Minecraft-independent persistent membership/revision index. The next SFM-side step is binding stable endpoint ids to real label/position/side/slot descriptors without duplicating CableNetwork's capability cache.
 
-### P5 — persistent transfer graph
+### P5 — persistent transfer graph — ENDPOINT BINDING PROTOTYPE IMPLEMENTED
 Separate static legal transfer relationships from dynamic inventory state. Rebuild only on structural invalidation.
+
+The current prototype caches each endpoint's dependent work-region array. Label/resource matching is performed on structural bind/rebind only; ordinary inventory/capacity revisions reuse that cached array and directly mark the dirty frontier. This is specifically aimed at infinite-resource/high-frequency worlds where endpoint state changes every tick.
 
 ### P6 — incremental invalidation — PRECISE FRONTIER PROTOTYPE IMPLEMENTED
 Maintain endpoint/label/resource -> region dependency indexes. The current prototype uses composite label/resource dependencies, so one changed iron endpoint does not dirty unrelated fluid regions or every iron region globally.
 
-The remaining research gate is the full churn sweep at 0.01%, 0.1%, 1%, 5%, 10%, 50%, 100% and selecting incremental/full recompute at the measured crossover.
+The research branch now includes a 0.01%, 0.1%, 1%, 5%, 10%, 50%, 100% persistent-frontier churn sweep. This measures bookkeeping/frontier cost only; it must not be misrepresented as the final execution crossover. The full-recompute crossover will be selected only after P7 supplies real region recomputation work.
 
 ### P7 — exact-order compiled executor
 Use precomputed candidate order but retain SFM ResourceType/trackers/capability commit semantics. This is the first architecture-scale TPS milestone.

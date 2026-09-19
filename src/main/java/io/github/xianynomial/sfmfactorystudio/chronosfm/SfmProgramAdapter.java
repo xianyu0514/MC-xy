@@ -91,6 +91,9 @@ public final class SfmProgramAdapter implements ProgramModelAdapter<Program> {
     }
 
     private static StatementModel.ResourceSelector adaptResources(ResourceLimits limits) {
+        if (limits.resourceLimitList().isEmpty()) {
+            return new StatementModel.ResourceSelector(List.of(), limits.toString());
+        }
         ResourceType<?, ?, ?>[] referenced = limits.getReferencedResourceTypes();
         List<String> types = referenced == null
                 ? List.of()

@@ -15,19 +15,24 @@ public final class PersistentEndpointIndex {
     public EndpointDelta upsert(EndpointDescriptor endpoint) {
         Objects.requireNonNull(endpoint, "endpoint");
         EndpointDescriptor previous = byId.get(endpoint.endpointId());
-        if (endpoint.equals(previous)) return new EndpointDelta(previous, endpoint, false);
+        if (endpoint.equals(previous)) {
+            return new EndpointDelta(previous, endpoint, false, false);
+        }
 
-        if (previous != null) removeMembership(previous);
+        boolean structureChanged = previous == null || !previous.hasSameStructure(endpoint);
+        if (structureChanged && previous != null) removeMembership(previous);
+
         byId.put(endpoint.endpointId(), endpoint);
-        addMembership(endpoint);
-        return new EndpointDelta(previous, endpoint, true);
+
+        if (structureChanged) addMembership(endpoint);
+        return new EndpointDelta(previous, endpoint, true, structureChanged);
     }
 
     public EndpointDelta remove(long endpointId) {
         EndpointDescriptor previous = byId.remove(endpointId);
-        if (previous == null) return new EndpointDelta(null, null, false);
+        if (previous == null) return new EndpointDelta(null, null, false, false);
         removeMembership(previous);
-        return new EndpointDelta(previous, null, true);
+        return new EndpointDelta(previous, null, true, true);
     }
 
     public Optional<EndpointDescriptor> get(long endpointId) {
@@ -75,7 +80,8 @@ public final class PersistentEndpointIndex {
     public record EndpointDelta(
             EndpointDescriptor previous,
             EndpointDescriptor current,
-            boolean changed
+            boolean changed,
+            boolean structureChanged
     ) {
     }
 }

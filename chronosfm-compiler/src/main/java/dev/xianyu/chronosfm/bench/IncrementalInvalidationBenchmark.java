@@ -58,14 +58,18 @@ public final class IncrementalInvalidationBenchmark {
         if (dirty != changes) {
             throw new IllegalStateException("Expected " + changes + " dirty regions, got " + dirty);
         }
+        if (runtime.graph().structuralRebindCount() != regions) {
+            throw new IllegalStateException("Hot updates unexpectedly rebuilt structural bindings");
+        }
 
         System.out.printf(
-                "Incremental frontier: %,d total regions, %,d endpoint changes -> %,d dirty regions in %.3f ms (%.1f ns/change)%n",
+                "Persistent frontier: %,d total regions, %,d hot endpoint changes -> %,d dirty regions in %.3f ms (%.1f ns/change), structuralRebinds=%,d%n",
                 regions,
                 changes,
                 dirty,
                 elapsed / 1_000_000.0,
-                elapsed / (double) changes
+                elapsed / (double) changes,
+                runtime.graph().structuralRebindCount()
         );
     }
 }

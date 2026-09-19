@@ -28,11 +28,12 @@ jobs:
   core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
       - name: Test compiler core
@@ -44,15 +45,19 @@ jobs:
       - name: Incremental endpoint/frontier smoke benchmark
         working-directory: chronosfm-compiler
         run: ../gradlew -p . runIncrementalBenchmark --args='100000 1000'
+      - name: Persistent churn sweep benchmark
+        working-directory: chronosfm-compiler
+        run: ../gradlew -p . runChurnSweepBenchmark --args='100000 3'
 
   sfm-1-21-1-adapter:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
       - name: Download official SFM 4.34.0 for MC 1.21.1

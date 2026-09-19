@@ -5,52 +5,43 @@ import dev.xianyu.chronosfm.ir.DependencyIndex;
 import java.util.Objects;
 
 public final class IncrementalRuntimeIndex {
-    private final PersistentEndpointIndex endpoints = new PersistentEndpointIndex();
-    private final InvalidationEngine invalidation;
+    private final PersistentTransferGraph graph;
 
     public IncrementalRuntimeIndex(DependencyIndex dependencies) {
-        this.invalidation = new InvalidationEngine(
+        this.graph = new PersistentTransferGraph(
                 Objects.requireNonNull(dependencies, "dependencies")
         );
     }
 
     public PersistentEndpointIndex.EndpointDelta upsertEndpoint(EndpointDescriptor endpoint) {
-        var delta = endpoints.upsert(endpoint);
-        if (!delta.changed()) return delta;
-
-        if (delta.previous() != null) invalidation.invalidateEndpoint(delta.previous());
-        if (delta.current() != null) invalidation.invalidateEndpoint(delta.current());
-        return delta;
+        return graph.upsert(endpoint);
     }
 
     public PersistentEndpointIndex.EndpointDelta removeEndpoint(long endpointId) {
-        var delta = endpoints.remove(endpointId);
-        if (delta.changed() && delta.previous() != null) {
-            invalidation.invalidateEndpoint(delta.previous());
-        }
-        return delta;
+        return graph.remove(endpointId);
     }
 
-    /**
-     * Marks dynamic state as changed without changing structural membership.
-     * This is the hot path for inventory/capacity revisions.
-     */
     public boolean endpointStateChanged(long endpointId) {
-        var endpoint = endpoints.get(endpointId);
-        if (endpoint.isEmpty()) return false;
-        invalidation.invalidateEndpoint(endpoint.get());
-        return true;
+        return graph.endpointStateChanged(endpointId);
+    }
+
+    public boolean endpointStateChanged(long endpointId, long nextRevision) {
+        return graph.endpointStateChanged(endpointId, nextRevision);
     }
 
     public PersistentEndpointIndex endpoints() {
-        return endpoints;
+        return graph.endpoints();
+    }
+
+    public PersistentTransferGraph graph() {
+        return graph;
     }
 
     public int dirtyCount() {
-        return invalidation.dirtyCount();
+        return graph.dirtyCount();
     }
 
     public int[] drainDirtyRegions() {
-        return invalidation.drainDirtyRegions();
+        return graph.drainDirtyRegions();
     }
 }

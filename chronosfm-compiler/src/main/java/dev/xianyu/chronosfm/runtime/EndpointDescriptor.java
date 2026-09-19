@@ -19,4 +19,10 @@ public record EndpointDescriptor(
     public EndpointDescriptor withRevision(long nextRevision) {
         return new EndpointDescriptor(endpointId, labels, resourceTypes, nextRevision);
     }
+
+    public boolean hasSameStructure(EndpointDescriptor other) {
+        return other != null
+                && labels.equals(other.labels)
+                && resourceTypes.equals(other.resourceTypes);
+    }
 }

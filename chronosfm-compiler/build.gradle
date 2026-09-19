@@ -41,3 +41,11 @@ tasks.register('runIncrementalBenchmark', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.xianyu.chronosfm.bench.IncrementalInvalidationBenchmark'
 }
+
+
+tasks.register('runChurnSweepBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'Sweeps persistent-frontier costs from 0.01% to 100% endpoint churn.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.xianyu.chronosfm.bench.ChurnSweepBenchmark'
+}

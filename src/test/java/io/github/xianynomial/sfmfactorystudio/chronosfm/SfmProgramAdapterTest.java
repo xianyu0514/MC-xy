@@ -1,11 +1,19 @@
 package io.github.xianynomial.sfmfactorystudio.chronosfm;
 
 import ca.teamdman.sfml.ast.Block;
+import ca.teamdman.sfml.ast.InputStatement;
 import ca.teamdman.sfml.ast.Interval;
+import ca.teamdman.sfml.ast.Label;
+import ca.teamdman.sfml.ast.LabelAccess;
+import ca.teamdman.sfml.ast.NumberRangeSet;
+import ca.teamdman.sfml.ast.OutputStatement;
 import ca.teamdman.sfml.ast.Program;
 import ca.teamdman.sfml.ast.RedstoneTrigger;
+import ca.teamdman.sfml.ast.ResourceIdSet;
+import ca.teamdman.sfml.ast.ResourceLimits;
+import ca.teamdman.sfml.ast.RoundRobin;
+import ca.teamdman.sfml.ast.SideQualifier;
 import ca.teamdman.sfml.ast.TimerTrigger;
-import ca.teamdman.sfml.program_builder.ProgramBuilder;
 import dev.xianyu.chronosfm.compiler.ChronoSfmCompiler;
 import dev.xianyu.chronosfm.ir.ExactOperation;
 import dev.xianyu.chronosfm.model.TriggerModel;
@@ -59,17 +67,32 @@ class SfmProgramAdapterTest {
 
     @Test
     void compilesRealFlatInputOutputIntoExactOrderIr() {
-        var result = new ProgramBuilder("""
-                NAME "chrono-flat"
-                EVERY 20 TICKS DO
-                    INPUT FROM source
-                    OUTPUT TO destination
-                END
-                """).useCache(false).build();
+        ResourceLimits noResourceLimits = new ResourceLimits(List.of(), ResourceIdSet.EMPTY);
 
-        assertNotNull(result.program(), () -> "SFM parser failed: " + result.metadata().errors());
+        InputStatement input = new InputStatement(
+                selector("source"),
+                noResourceLimits,
+                false
+        );
+        OutputStatement output = new OutputStatement(
+                selector("destination"),
+                noResourceLimits,
+                false,
+                false
+        );
 
-        var plan = new ChronoSfmCompiler().compile(adapter.adapt(result.program()));
+        Program program = new Program(
+                null,
+                "chrono-flat",
+                List.of(new TimerTrigger(
+                        new Interval(20, Interval.IntervalAlignment.LOCAL, 0),
+                        new Block(List.of(input, output))
+                )),
+                Set.of(),
+                Set.of()
+        );
+
+        var plan = new ChronoSfmCompiler().compile(adapter.adapt(program));
         var operations = plan.exactOperationsForTrigger(0);
 
         assertEquals(2, operations.size());
@@ -77,9 +100,18 @@ class SfmProgramAdapterTest {
         assertInstanceOf(ExactOperation.OutputOp.class, operations.get(1));
         assertTrue(operations.get(0).exactOrderOrdinal() < operations.get(1).exactOrderOrdinal());
 
-        var input = (ExactOperation.InputOp) operations.get(0);
-        var output = (ExactOperation.OutputOp) operations.get(1);
-        assertEquals(List.of("source"), input.selector().labels());
-        assertEquals(List.of("destination"), output.selector().labels());
+        var inputOp = (ExactOperation.InputOp) operations.get(0);
+        var outputOp = (ExactOperation.OutputOp) operations.get(1);
+        assertEquals(List.of("source"), inputOp.selector().labels());
+        assertEquals(List.of("destination"), outputOp.selector().labels());
+    }
+
+    private static LabelAccess selector(String label) {
+        return new LabelAccess(
+                List.of(new Label(label)),
+                SideQualifier.DEFAULT,
+                NumberRangeSet.MAX_RANGE,
+                RoundRobin.disabled()
+        );
     }
 }
