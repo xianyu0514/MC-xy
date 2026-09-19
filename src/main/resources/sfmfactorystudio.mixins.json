@@ -10,7 +10,8 @@
     "CableNetworkManagerAccessor",
     "LabelPositionHolderRevisionMixin",
     "BlockNetworkRevisionMixin",
-    "CapabilityCacheRevisionMixin"
+    "CapabilityCacheRevisionMixin",
+    "IoCapabilityDiscoveryMixin"
   ],
   "injectors": {
     "defaultRequire": 0

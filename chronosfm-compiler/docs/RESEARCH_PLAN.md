@@ -32,7 +32,7 @@ Translate safe AST subsets into immutable TriggerPlan and TransferRegion IR. Pre
 ### P4 — persistent endpoint index — CORE PROTOTYPE IMPLEMENTED
 Cache semantic label/resource/slot relationships while reusing SFM's existing CableNetwork capability cache.
 
-Current research branch provides the Minecraft-independent persistent membership/revision index. The next SFM-side step is binding stable endpoint ids to real label/position/side/slot descriptors without duplicating CableNetwork's capability cache.
+Current research branch provides the Minecraft-independent persistent membership/revision index. The SFM-side integration now also prototypes a conservative persistent capability-route template: for non-round-robin absolute-side LabelAccess, stable label -> BlockPos -> direction addresses are reused across due ticks while SFM's own CableNetwork is still queried for the current capability every tick. No third-party capability object or slot content is retained. Relative sides, round robin, missing revision instrumentation, and diagnostic logging fail closed to upstream discovery.
 
 ### P5 — persistent transfer graph — ENDPOINT BINDING PROTOTYPE IMPLEMENTED
 Separate static legal transfer relationships from dynamic inventory state. Rebuild only on structural invalidation.
