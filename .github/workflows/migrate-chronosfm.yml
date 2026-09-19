@@ -20,17 +20,22 @@ jobs:
 
       - name: Clone source branch
         run: |
-          git clone --depth 1 --branch feat/chronosfm-compiler-bootstrap             https://github.com/xianyu0514/SFM-Factory-Studio.git /tmp/chronosfm-source
+          git clone --depth 1 --branch feat/chronosfm-compiler-bootstrap \
+            https://github.com/xianyu0514/SFM-Factory-Studio.git /tmp/chronosfm-source
 
-      - name: Replace target working tree with source snapshot
+      - name: Replace target snapshot excluding workflows
         run: |
-          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          tar --exclude=.git -C /tmp/chronosfm-source -cf - . | tar -xf -
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name .github -exec rm -rf {} +
+          mkdir -p .github
+          find .github -mindepth 1 -maxdepth 1 ! -name workflows -exec rm -rf {} +
+          tar --exclude=.git --exclude=.github/workflows -C /tmp/chronosfm-source -cf - . | tar -xf -
 
       - name: Commit migrated snapshot
         run: |
           git config user.name "ChronoSFM Migration Bot"
           git config user.email "actions@users.noreply.github.com"
           git add -A
-          git commit -m "feat: migrate ChronoSFM compiler bootstrap from SFM-Factory-Studio"             -m "Source: xianyu0514/SFM-Factory-Studio@c8d3a10695f6791ae93715b305df748c0627ef6c"             -m "Branch: feat/chronosfm-compiler-bootstrap"
+          git commit -m "feat: migrate ChronoSFM compiler bootstrap from SFM-Factory-Studio" \
+            -m "Source: xianyu0514/SFM-Factory-Studio@c8d3a10695f6791ae93715b305df748c0627ef6c" \
+            -m "Branch: feat/chronosfm-compiler-bootstrap"
           git push origin HEAD:main
