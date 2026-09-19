@@ -6,7 +6,10 @@
   "mixins": [
     "WithTagMixin",
     "ManagerTickMixin",
-    "ProgramContextMixin"
+    "ProgramContextMixin",
+    "LabelPositionHolderRevisionMixin",
+    "BlockNetworkRevisionMixin",
+    "CapabilityCacheRevisionMixin"
   ],
   "injectors": {
     "defaultRequire": 0
